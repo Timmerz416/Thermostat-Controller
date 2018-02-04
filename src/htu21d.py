@@ -54,7 +54,7 @@ class HTU21D(I2CBus):
 	# Constructor
 	#---------------------------------------------------------------------------
 	def __init__(self, bus_number):
-		# type: (int) -> none
+		# types: (int) -> none
 		"""
 		Constructor for the HTU21D object.
 		:param bus_number: The number of the I2C bus that the HTU21D is on
@@ -65,7 +65,7 @@ class HTU21D(I2CBus):
 	# soft_reset Method
 	#---------------------------------------------------------------------------
 	def soft_reset(self):
-		# type: (none) -> none
+		# types: (none) -> none
 		"""
 		Reset the HTU21D by power cycling on the chip.
 		"""
@@ -76,7 +76,7 @@ class HTU21D(I2CBus):
 	# read_temperature Method
 	#---------------------------------------------------------------------------
 	def read_temperature(self):
-		# type: (none) -> double
+		# types: (none) -> double
 		"""
 		Read the current temperature on the HTU21D
 		:return: The temperature in degrees Celcius
@@ -98,7 +98,7 @@ class HTU21D(I2CBus):
 	# read_humidity Method
 	#---------------------------------------------------------------------------
 	def read_humidity(self):
-		# type: (none) -> double
+		# types: (none) -> double
 		"""
 		Read the current humidity on the HTU21D
 		:return: The humidity in percent relative humidity

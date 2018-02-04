@@ -88,7 +88,7 @@ class TSL2561(I2CBus):
 	# Constructor
 	#---------------------------------------------------------------------------
 	def __init__(self, bus_number):
-		# type: (int) -> none
+		# types: (int) -> none
 		"""
 		Constructor for the TSL2561 object.  Determines the integration/gain.
 		:param bus_number: The number of the I2C bus that the TSL2561 is on
@@ -108,7 +108,7 @@ class TSL2561(I2CBus):
 	#---------------------------------------------------------------------------
 	# Turns on the power to the sensor
 	def enable(self):
-		# type: (none) -> none
+		# types: (none) -> none
 		"""
 		Turn on the power to the sensor.
 		"""
@@ -120,7 +120,7 @@ class TSL2561(I2CBus):
 	#---------------------------------------------------------------------------
 	# Turns off the power to the sensor
 	def disable(self):
-		# type: (none) -> none
+		# types: (none) -> none
 		"""
 		Turn off the power to the sensor.
 		"""
@@ -132,7 +132,7 @@ class TSL2561(I2CBus):
 	#---------------------------------------------------------------------------
 	# Set the integration and gain settings on the sensor
 	def set_timing(self, gain, int_period):
-		# type: (int, int) -> none
+		# types: (int, int) -> none
 		"""
 		Set the integration/gain settings.
 		:param gain: The gain setting
@@ -152,7 +152,7 @@ class TSL2561(I2CBus):
 	#---------------------------------------------------------------------------
 	# Reads the raw measured luminosity from the specified channel
 	def get_channel_data(self, channel):
-		# type (int) -> list
+		# types: (int) -> list
 		"""
 		Read the data from the specified channel.
 		:param channel: The channel to read the data from
@@ -178,13 +178,13 @@ class TSL2561(I2CBus):
 	#---------------------------------------------------------------------------
 	# Convert the measured luminosity in both channels to luminosity in lux
 	def _convert_lux(self, chan0, chan1):
-		# type: (int, int) -> double
-		'''
+		# types: (int, int) -> double
+		"""
 		Convert the measured channel data from the sensors to lux.
 		:param chan0: The sensor measurement from channel 0
 		:param chan1: The sensor measurement from channel 1
 		:return: The luminosity in lux
-		'''
+		"""
 		# Calculate luminosity from measured data
 		if chan0 != 0:
 			# Determine scaling factor - account for integration time
@@ -213,7 +213,7 @@ class TSL2561(I2CBus):
 			else:
 				lum_lux = 0.0
 		else:
-			lum_lux = 0.0;	# Set luminosity to zero
+			lum_lux = 0.0	# Set luminosity to zero
 		
 		return lum_lux
 		
@@ -222,7 +222,7 @@ class TSL2561(I2CBus):
 	#---------------------------------------------------------------------------
 	# Read the luminosity based on current sensor setting and report in lux
 	def read_luminosity(self):
-		# type: (none) -> double
+		# types: (none) -> double
 		"""
 		Reads the luminosity using the current integration/gain settings.
 		:return: The measured luminosity in lux
@@ -241,7 +241,7 @@ class TSL2561(I2CBus):
 	# Optimize the sensor measurements to give a reasonable luminosity
 	# measurement, if possible, and report in lux
 	def read_luminosity_opt(self):
-		# type (none) -> double
+		# types: (none) -> double
 		"""
 		Optimizes the sensor settings to give best luminosity reading.
 		:return: The measured luminosity in lux
@@ -257,7 +257,7 @@ class TSL2561(I2CBus):
 			# Get raw luminosity measurement
 			chan0_data = self.get_channel_data(TSL2561_CHANNEL_0)
 			chan1_data = self.get_channel_data(TSL2561_CHANNEL_1)
-			print '\tRaw data: %04x %04x %i %i' % (chan0_data, chan1_data, self._gain, self._int_period)
+#			print '\tRaw data: %04x %04x %i %i' % (chan0_data, chan1_data, self._gain, self._int_period)
 			
 			# Evaluate signal strength - this is a bit crude with gain treatment
 			if (chan0_data == 0xFFFF) or (chan1_data == 0xFFFF):	# Saturated signal

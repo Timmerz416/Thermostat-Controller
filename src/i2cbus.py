@@ -47,7 +47,7 @@ class I2CBus:
 	# Constructor
 	#---------------------------------------------------------------------------
 	def __init__(self, bus_number, address):
-		# type: (int, int) -> none
+		# types: (int, int) -> none
 		"""
 		Constructor to set the bus number and device address.
 		:param bus_number: The bus ID (0 or 1)
@@ -55,14 +55,14 @@ class I2CBus:
 		"""
 		self._bus_num = bus_number	# The bus number on the Pi
 		self._address = address		# The address of the I2C device
-		self._bus = pigpio.pi()		# The interface object for hte bus
+		self._bus = pigpio.pi()		# The interface object for the bus
 		
 	#---------------------------------------------------------------------------
 	# _write Method
 	#---------------------------------------------------------------------------
 	# Write data buffer to the device
 	def _write(self, msg_buffer):
-		# type: (list) -> none
+		# types: (list) -> none
 		"""
 		Write data to the I2C device
 		:param msg_buffer: The bytes to send
@@ -76,7 +76,7 @@ class I2CBus:
 	#---------------------------------------------------------------------------
 	# Read a data byte from the device
 	def _read(self, size):
-		# type: (int) -> list
+		# types: (int) -> list
 		"""
 		Reads a data buffer from the I2C device
 		:param size: The number of byte to read from the device
@@ -93,11 +93,11 @@ class I2CBus:
 	#---------------------------------------------------------------------------
 	# Writes a byte command to a defined register
 	def _write_register(self, register, msg_buffer):
-		# type: (int, list) -> none
+		# types: (int, list) -> none
 		"""
 		Writes a list of commends to a device register
 		:param register: The register to write to
-		:param msg: The list of commands to send to the register
+		:param msg_buffer: The list of commands to send to the register
 		"""
 		handle = self._bus.i2c_open(self._bus_num, self._address)
 		self._bus.i2c_write_i2c_block_data(handle, register, msg_buffer)
@@ -108,7 +108,7 @@ class I2CBus:
 	#---------------------------------------------------------------------------
 	# Reads a list of bytes from a register
 	def _read_register(self, register, size):
-		# type: (int, int) -> list
+		# types: (int, int) -> list
 		"""
 		Reads a list of bytes from a specified register
 		:param register: The register to read from
