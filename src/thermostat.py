@@ -169,6 +169,7 @@ class Thermostat(threading.Thread):
 		# Loop until time to close
 		non_printing_loops = self._data_cycles
 		while not self._kill_event.is_set():
+			logging.info('Thermostat control cycle %i of %i initiated', non_printing_loops, self._data_cycles)
 			# Evaluate thermostat programming
 			force_print = False
 			if non_printing_loops == self._data_cycles:
@@ -379,24 +380,23 @@ class Thermostat(threading.Thread):
 	def _evaluate_programming(self, ForceUpdate = False):
 		# types: (boolean) -> none
 		# Read the current temperature
-		logging.info('Thermostat control loop initiated')
 		cur_temp = self._temp_sensor.read_temperature()
 		self._temperature = cur_temp	# Store the last temperature read
-		update_db = ForceUpdate
-		
-		# Update the display with the current temperature
 		temp_str = '%.1f' % cur_temp
-		if self._indoor_temp_str != temp_str:
-			logging.debug('  Writing string %s to the display', temp_str)
-			self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.INSIDE_TEMP, temp_str)))
-			self._indoor_temp_str = temp_str
-		
+		update_db = ForceUpdate
+
 		# Get the current time
 		cur_time = time.localtime()
 		cur_hour = cur_time.tm_hour + (60*cur_time.tm_min + cur_time.tm_sec)/3600.0
 		cur_day = cur_time.tm_wday
 		logging.debug('  Measured temperature %.2f Celsius on day %i at hour %.2f', cur_temp, cur_day, cur_hour)
-		
+
+		# Update the display with the current temperature
+		if self._indoor_temp_str != temp_str:
+			logging.debug('  Writing string %s to the display', temp_str)
+			self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.INSIDE_TEMP, temp_str)))
+			self._indoor_temp_str = temp_str
+
 		# Temperature checks
 		# ----------------------------------------------------------------------
 		if cur_temp < MIN_TEMPERATURE:	# Temperature below limit, turn on relay
@@ -423,7 +423,7 @@ class Thermostat(threading.Thread):
 			else:
 				# No change
 				logging.debug('    Relay not changed')
-		else:	# Temperature is within limits, so check against rules
+		elif self._thermo_on:	# Temperature is within limits, so check against rules
 			logging.debug('  Programming Mode On - Checking against programmed rules')
 			rule_found = False	# Flag for finding the rule
 			while not rule_found:	# Iterate through the rules until one is found
@@ -456,6 +456,8 @@ class Thermostat(threading.Thread):
 					else:
 						cur_day -= 1
 					cur_hour += 24.0
+		else:  # Thermostat is off, so no update
+			logging.debug('    Thermostat off - no change')
 			
 		# Send thermostat status to database
 		#-----------------------------------------------------------------------
@@ -485,7 +487,7 @@ class Thermostat(threading.Thread):
 		            'thermo_on': 1.0 if self._thermo_on else 0.0,
 		            'heating_on': 1.0 if self._relay_on else 0.0}
 		if self._override_on: cur_data['override'] = self._setpoint
-		logging.debug('cur_data from thermostat._update_database: %s', cur_data)
+#		logging.debug('cur_data from thermostat._update_database: %s', cur_data)
 
 		# Send the data package message
 		logging.info('  Sending thermostat data to be transmitted through the LAN')
