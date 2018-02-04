@@ -291,33 +291,37 @@ class Thermostat(threading.Thread):
 	#---------------------------------------------------------------------------
 	def _update_override(self, dpack):
 		# types: (DataPacket) -> DataPacket
-		# Check the status command
-		if dpack.packet.subcommand == STATUS_ON:
-			# Set the override mode and setpoint
-			logging.info('  Thermostat is turning override mode on with setpoint %.2f', dpack.packet.data)
-			self._override_on = True
-			self._override_temp = dpack.packet.data
-			self._setpoint = self._override_temp
-			button_status = display.BTN_ON
-		else:
-			# Set override mode
-			logging.info('  Thermostat is turning override mode off')
-			self._override_on = False
-			button_status = display.BTN_OFF
-			if dpack.packet.data:
+		# Only update the override mode if the thermostat controller is on
+		return_status = 'PO:NACK'
+		if self._thermo_on:
+			# Check the status command
+			if dpack.packet.subcommand == STATUS_ON:
+				# Set the override mode and setpoint
+				logging.info('  Thermostat is turning override mode on with setpoint %.2f', dpack.packet.data)
+				self._override_on = True
 				self._override_temp = dpack.packet.data
+				self._setpoint = self._override_temp
+				button_status = display.BTN_ON
+			else:
+				# Set override mode
+				logging.info('  Thermostat is turning override mode off')
+				self._override_on = False
+				button_status = display.BTN_OFF
+				if dpack.packet.data:
+					self._override_temp = dpack.packet.data
 
-		# Update the display if command was from the LAN
-		if dpack.host != 'DISPLAY':
-			self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.OVER_BTN, button_status)))
-			self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.OVER_SCALE, self._override_temp)))
-		
-		# Re-evaluation relay status against the setpoint
-		self._evaluate_programming(True)	# Force an update based on status
-		
+			# Update the display if command was from the LAN
+			if dpack.host != 'DISPLAY':
+				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.OVER_BTN, button_status)))
+				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.OVER_SCALE, self._override_temp)))
+
+			# Re-evaluation relay status against the setpoint
+			self._evaluate_programming(True)	# Force an update based on status
+			return_status = 'PO:ACK'
+
 		# Return an acknowledgement
-		return messaging.DataPacket(dpack.host, dpack.port, 'PO:ACK')
-		
+		return messaging.DataPacket(dpack.host, dpack.port, return_status)
+
 	#---------------------------------------------------------------------------
 	# _return_status Method
 	#---------------------------------------------------------------------------

@@ -124,7 +124,13 @@ class DisplayControl(threading.Thread):
 							if reply.index == POWER_BTN_ADD:
 								self._update_power_status(reply.data)
 							elif reply.index == OVER_BTN_ADD:
-								self._update_override(reply.data, self._setpoint)
+								# Only allow this to change state if the thermostat power is on
+								thermo_status = geniePi.genieReadObj(geniePi.GENIE_OBJ_4DBUTTON, POWER_BTN_ADD)
+								if thermo_status:
+									self._update_override(reply.data, self._setpoint)
+								else:  # Revert the override status to its initial state
+									prev_override_status = BTN_OFF if reply.data else BTN_ON
+									geniePi.genieWriteObj(geniePi.GENIE_OBJ_4DBUTTON, OVER_BTN_ADD, prev_override_status)
 							else:
 								logging.error('  Unknown button pressed: %i.  No action taken', reply.index)
 						elif reply.object == geniePi.GENIE_OBJ_TRACKBAR:  # Slider interacted with
@@ -132,7 +138,7 @@ class DisplayControl(threading.Thread):
 								# Update the internal setpoint register
 								self._setpoint = 15 + reply.data
 
-								# Get the current override setting
+								# Update the thermostat controller iff override mode is on
 								override_status = geniePi.genieReadObj(geniePi.GENIE_OBJ_4DBUTTON, OVER_BTN_ADD)
 								logging.debug('    Current display override status: %i', override_status)
 								if override_status:  # The override mode is on
