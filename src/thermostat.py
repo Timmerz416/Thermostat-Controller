@@ -162,7 +162,8 @@ class Thermostat(threading.Thread):
 		self._set_thermo_status(THERMOSTAT_ON)
 		self._set_relay_status(RELAY_OFF)
 
-		# Initialize the override settings on the display
+		# Initialize the settings on the display
+		self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.POWER_LED, display.LED_ON)))
 		self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.OVER_BTN, display.BTN_OFF)))
 		self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.OVER_SCALE, self._override_temp)))
 
@@ -285,6 +286,7 @@ class Thermostat(threading.Thread):
 		self._set_thermo_status(THERMOSTAT_OFF)
 		self._set_relay_status(RELAY_ON)
 		self._update_database()
+		self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.POWER_LED, display.LED_OFF)))
 
 	#---------------------------------------------------------------------------
 	# _update_override Method
@@ -352,10 +354,10 @@ class Thermostat(threading.Thread):
 			# Update the power indicators
 			if PowerStatus == THERMOSTAT_ON:	# Turn on the LED
 				self._gpio_bus.write(THERMO_POWER_PIN, 1)	# Power up the button
-				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.POWER_BTN, display.BTN_ON)))
+				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.PROGRAM_BTN, display.BTN_ON)))
 			else:	# Turn off the LED
 				self._gpio_bus.write(THERMO_POWER_PIN, 0)	# Power down the button
-				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.POWER_BTN, display.BTN_OFF)))
+				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.PROGRAM_BTN, display.BTN_OFF)))
 
 	#---------------------------------------------------------------------------
 	# _set_relay_status Method

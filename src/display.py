@@ -43,7 +43,8 @@ INTEMP_ADD		= 0x01
 OUTTEMP_ADD		= 0x02
 SETPOINT_ADD	= 0x03
 RELAY_LED_ADD	= 0x00
-POWER_BTN_ADD	= 0x00
+POWER_LED_ADD   = 0x01
+PROGRAM_BTN_ADD	= 0x00
 OVER_BTN_ADD	= 0x01
 TRACKBAR_ADD	= 0x00
 WEATHER_ADD		= 0x00
@@ -58,14 +59,14 @@ BTN_OFF			= 0
 SET_STATUS      = 0
 
 # Subcommands
-POWER_BTN       = 0
+PROGRAM_BTN     = 0
 RELAY_LED       = 1
 OVER_BTN        = 2
 OVER_SCALE      = 4
 INSIDE_TEMP     = 5
 OUTSIDE_TEMP    = 6
 SETPOINT_TEMP   = 7
-
+POWER_LED       = 8
 
 #===============================================================================
 # DisplayControl Class
@@ -121,11 +122,11 @@ class DisplayControl(threading.Thread):
 					# Handle the message type - only expecting report events
 					if reply.cmd == geniePi.GENIE_REPORT_EVENT:
 						if reply.object == geniePi.GENIE_OBJ_4DBUTTON:  # Button pressed
-							if reply.index == POWER_BTN_ADD:
+							if reply.index == PROGRAM_BTN_ADD:
 								self._update_power_status(reply.data)
 							elif reply.index == OVER_BTN_ADD:
 								# Only allow this to change state if the thermostat power is on
-								thermo_status = geniePi.genieReadObj(geniePi.GENIE_OBJ_4DBUTTON, POWER_BTN_ADD)
+								thermo_status = geniePi.genieReadObj(geniePi.GENIE_OBJ_4DBUTTON, PROGRAM_BTN_ADD)
 								if thermo_status:
 									self._update_override(reply.data, self._setpoint)
 								else:  # Revert the override status to its initial state
@@ -168,8 +169,8 @@ class DisplayControl(threading.Thread):
 		cur_cmd = command.packet
 		if cur_cmd.command == SET_STATUS:
 			# Check the subcommand
-			if cur_cmd.subcommand == POWER_BTN:
-				self._update_btn(POWER_BTN_ADD, cur_cmd.data)
+			if cur_cmd.subcommand == PROGRAM_BTN:
+				self._update_btn(PROGRAM_BTN_ADD, cur_cmd.data)
 			elif cur_cmd.subcommand == RELAY_LED:
 				self._update_led(RELAY_LED_ADD, cur_cmd.data)
 			elif cur_cmd.subcommand == OVER_BTN:
@@ -182,6 +183,8 @@ class DisplayControl(threading.Thread):
 				self._update_string(OUTTEMP_ADD, cur_cmd.data)
 			elif cur_cmd.subcommand == SETPOINT_TEMP:
 				self._update_string(SETPOINT_ADD, cur_cmd.data)
+			elif cur_cmd.subcommand == POWER_LED:
+				self._update_led(POWER_LED_ADD, cur_cmd.data)
 		else:
 			logging.error('  Display message unrecognized - no action taken')
 
