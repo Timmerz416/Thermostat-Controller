@@ -89,7 +89,7 @@ class DisplayControl(threading.Thread):
 		self._ehandler = event_handler
 		self._display_error = False
 		self._setpoint = 15
-		
+
 		# Initialize as a thread
 		self._kill_event = kill_event
 		threading.Thread.__init__(self)
@@ -131,6 +131,12 @@ class DisplayControl(threading.Thread):
 							if reply.index == TRACKBAR_ADD:
 								# Update the internal setpoint register
 								self._setpoint = 15 + reply.data
+
+								# Get the current override setting
+								override_status = geniePi.genieReadObj(geniePi.GENIE_OBJ_4DBUTTON, OVER_BTN_ADD)
+								logging.debug('    Current display override status: %i', override_status)
+								if override_status:  # The override mode is on
+									self._update_override(override_status, self._setpoint)
 							else:
 								logging.error('  Unknown trackbar changes: %i.  No action taken', reply.index)
 						else:
