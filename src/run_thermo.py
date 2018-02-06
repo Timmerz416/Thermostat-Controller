@@ -10,13 +10,11 @@ import Queue
 import logging
 import threading
 import argparse
+import config
 
 # ===============================================================================
 # CONSTANTS
 # ===============================================================================
-# Server
-SERVER_PORT = 5267  # The port that the LAN server will listen on
-
 # Timing
 MESSAGE_DELAY = 0.001  # The delay between checking for new messages
 NORM_CONTROL_INTERVAL = 10  # Number of sensor cycles for sensor data output
@@ -131,7 +129,7 @@ thermo_thread = thermostat.Thermostat(queue_message, shutdown, sensor_delay, con
 thermo_thread.start()
 
 # Start the LAN network
-lan_thread = lan_network.LANNetwork(queue_message, shutdown, SERVER_PORT)
+lan_thread = lan_network.LANNetwork(queue_message, shutdown, config.SERVER_PORT)
 lan_thread.start()
 
 # Start the xbee network

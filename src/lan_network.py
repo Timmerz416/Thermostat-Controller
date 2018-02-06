@@ -34,12 +34,11 @@ import logging
 import socket
 import select
 import thermostat
+import config
 
 #===============================================================================
 # CONSTANTS
 #===============================================================================
-DB_ADDRESS = '192.168.2.53'	# The IP address of the HTTP interface to the DB
-
 SOCKET_DELAY			= 0.1	# Delay in seconds for socket client read
 SOCKET_MESSAGE_LENGTH	= 50	# Maximum length for a LAN command
 
@@ -189,7 +188,7 @@ class LANNetwork(threading.Thread):
 		# types: (string) -> boolean
 		# Create the connection to the HTTP server
 		logging.debug('  Sending HTTP request to LAN: %s', GetRequest)
-		httpconn = httplib.HTTPConnection(DB_ADDRESS)
+		httpconn = httplib.HTTPConnection(config.DB_ADDRESS)
 		
 		# Send request and read response
 		httpconn.request('GET', GetRequest)

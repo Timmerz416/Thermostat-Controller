@@ -28,7 +28,6 @@
 #
 
 # Imports
-import time
 import serial
 from xbee import ZigBee
 import threading

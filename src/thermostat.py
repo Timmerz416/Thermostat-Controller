@@ -33,9 +33,11 @@ import pigpio
 import threading
 import time
 import display
+import config
 from tsl2561 import TSL2561
 from htu21d import HTU21D
 from datetime import datetime
+from simple_types import RULE_DAYS
 
 #===============================================================================
 # Constants
@@ -78,19 +80,6 @@ RELAY_POWER_PIN		= 16
 RELAY_STATUS_PIN	= 20
 POWER_SWITCH_PIN	= 12
 
-# Rules
-RULE_DAYS = {
-	'Monday': 0,
-	'Tuesday': 1,
-	'Wednesday': 2,
-	'Thursday': 3,
-	'Friday': 4,
-	'Saturday': 5,
-	'Sunday': 6,
-	'Weekdays': 7,
-	'Weekends': 8,
-	'Everyday': 9 }
-
 
 #===============================================================================
 # Thermostat Class
@@ -126,15 +115,6 @@ class Thermostat(threading.Thread):
 		self._qbase = query_base
 		self._thermo_on = False  # Set so first call to _set_thermo_status turns on the thermostat
 		self._relay_on = True  # Set so first call to _set_relay_status turns off the relay
-		
-		# Setup default rules
-		self._rules = [
-			{ 'day': RULE_DAYS['Weekdays'], 'time': 23.5, 'temperature': 19.0 },
-			{ 'day': RULE_DAYS['Weekdays'], 'time': 16.5, 'temperature': 22.0 },
-			{ 'day': RULE_DAYS['Weekdays'], 'time':  8.0, 'temperature': 18.0 },
-			{ 'day': RULE_DAYS['Weekdays'], 'time':  6.5, 'temperature': 22.0 },
-			{ 'day': RULE_DAYS['Weekends'], 'time': 23.5, 'temperature': 19.0 },
-			{ 'day': RULE_DAYS['Weekends'], 'time':  7.5, 'temperature': 22.0 } ]
 
 		# Initialize the gpio
 		self._gpio_bus = pigpio.pi()
@@ -433,7 +413,7 @@ class Thermostat(threading.Thread):
 			logging.debug('  Programming Mode On - Checking against programmed rules')
 			rule_found = False	# Flag for finding the rule
 			while not rule_found:	# Iterate through the rules until one is found
-				for cur_rule in self._rules:
+				for cur_rule in config.programming_rules:
 					if self._rule_applies(cur_rule, cur_day, cur_hour): # Rule applies
 						# Determine how to control the relay
 						if self._relay_on and (cur_temp > (cur_rule['temperature'] + TEMPERATURE_BUFFER)):
@@ -509,7 +489,7 @@ class Thermostat(threading.Thread):
 		resp_str = self._qbase	# Set the base of the query
 
 		# Include the radio
-		resp_str += 'radio_id=40ab9778'
+		resp_str += 'radio_id=' + config.THERMO_RADIO
 			
 		# Iterate through all the sensors adding data
 		for key, value in data.iteritems():
