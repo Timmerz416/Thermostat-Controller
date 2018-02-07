@@ -34,6 +34,8 @@ import threading
 import messaging
 import logging
 import struct
+import config
+import display
 
 #===============================================================================
 # CONSTANTS
@@ -106,12 +108,19 @@ class XBeeNetwork(threading.Thread):
 		# Check the message type
 		logging.info('Received an XBee data packet')
 		if 'id' in data and data['id'] == 'rx':	# Sensor data received
-			# Create request
+			# Create database update string and send to the database over the LAN
 			request_str = self._create_request(data)
 			if request_str:	# Something to send
 				# Send the message out to the database
 				logging.info('  Sending XBee data to be transmitted through the LAN')
 				self._ehandler(messaging.XBeeRxMessage(messaging.DBPacket(request_str)))
+
+				# Check to see if this is the outdoor sensor, and update display if it is
+				xbee_address = messaging.binary_print(data['source_addr_long'][-4:], '')
+				logging.debug('    Checking if %s is the outdoor sensor', xbee_address)
+				if xbee_address == config.outdoor_radio:  # outdoor_radio specified by user in config file
+					logging.debug('    Updating the display with the outdoor temperature')
+					self._update_display(data)
 		else:	# Something else received
 			logging.warning('  Received something unexpected from the XBee network: %s', data)
 
@@ -182,3 +191,19 @@ class XBeeNetwork(threading.Thread):
 		# Return the string
 		logging.debug('  Finished database insert string creation: %s', resp_str)
 		return resp_str
+
+	#---------------------------------------------------------------------------
+	# _update_display Method
+	#---------------------------------------------------------------------------
+	def _update_display(self, data):
+		# types: (map) -> None
+		# Iterate through the data looking for the temperature - this coding assumes that the data is ok as a response
+		# string was created in a previous function call.  No data quality checks are made.
+		data_length = len(data['rf_data']) - 1
+		num_sensors = data_length / 5  # Data transferred in 5-byte chunks
+		for i in range(num_sensors):
+			type_byte = ord(data['rf_data'][5 * i + 1])
+			if type_byte == TEMPERATURE_CODE:  # Found temperature, convert to string and send to the display
+				float_value = struct.unpack('f', data['rf_data'][5*i+2:5*i+7])  # Convert the bytes to a single-precision float
+				display_str = 'Outdoor: %.1f' % float_value
+				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.OUTSIDE_TEMP, display_str)))
