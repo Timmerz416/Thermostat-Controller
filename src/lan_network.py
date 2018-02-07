@@ -102,6 +102,7 @@ class LANNetwork(threading.Thread):
 						self._handle_command(host, sock_packet)
 	
 		# Close the listening socket
+		self._server.shutdown(socket.SHUT_RDWR)
 		self._server.close()
 		logging.debug('LAN thread closing')
 
@@ -186,25 +187,31 @@ class LANNetwork(threading.Thread):
 	@staticmethod
 	def send_http_request(GetRequest):
 		# types: (string) -> boolean
-		# Create the connection to the HTTP server
+		# Create the HTTP server connection object
 		logging.debug('  Sending HTTP request to LAN: %s', GetRequest)
-		httpconn = httplib.HTTPConnection(config.DB_ADDRESS)
-		
-		# Send request and read response
-		httpconn.request('GET', GetRequest)
-		httpresp = httpconn.getresponse()
+		httpconn = httplib.HTTPConnection(config.DB_ADDRESS, timeout=5)  # Set timeout to 5 seconds
+		success = False  # Assume failure to connect and pass data
+		try:
+			# Send request and read response
+			httpconn.request('GET', GetRequest)
+			httpresp = httpconn.getresponse()
 
-		# Process the response
-		if httpresp.reason == "OK":
-			logging.debug('    LAN HTTP response received: OK')
-			success = True
-		else:
-			resp_data = httpresp.read()
-			logging.warning('  Issue with sent HTTP request (%s) returned: %s', GetRequest, resp_data)
-			success = False
-		
-		# Close connection and return
-		httpconn.close()
+			# Process the response
+			if httpresp.reason == "OK":
+				logging.debug('    LAN HTTP response received: OK')
+				success = True
+			else:
+				resp_data = httpresp.read()
+				logging.warning('  Issue with sent HTTP request (%s) returned: %s', GetRequest, resp_data)
+		except httplib.NotConnected:
+			logging.error('  Thermostat not connected to the HTTP destination %s - data not transmitted', config.DB_ADDRESS)
+		except httplib.HTTPException as err:
+			logging.error('  Received HTTP error - %s - data not transmitted', str(err))
+		except socket.error as serr:
+			logging.error('  Received socket error - %s - data not transmitted', str(serr))
+		finally:
+			httpconn.close()  # Close the http connection
+
 		return success
 		
 	#---------------------------------------------------------------------------
@@ -215,10 +222,17 @@ class LANNetwork(threading.Thread):
 		# types: (list, string) -> boolean
 		# Create the socket connection
 		client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		client.connect((DPacket.host, int(DPacket.port)))
+		client.settimeout(3)  # Set a timeout of 3 seconds for directly over a socket
+		success = True  # Assume the socket write is fine
+		try:
+			# Connect to the socket and send the data
+			client.connect((DPacket.host, int(DPacket.port)))
+			client.send(DPacket.packet)
+		except socket.error as err:
+			logging.error('  Thermostat socket error writing to %s:%s - %s - data not transmitted', DPacket.host, DPacket.port, str(err))
+			success = False
+		finally:
+			client.shutdown(socket.SHUT_RDWR)
+			client.close()
 		
-		# Send the response and close
-		client.send(DPacket.packet)
-		client.close()
-		
-		return True
+		return success
