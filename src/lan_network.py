@@ -59,13 +59,10 @@ class LANNetwork(threading.Thread):
 		# Set event handler
 		self._ehandler = event_handler
 		
-		# Initialize the server - TODO to handle issues with connecting to the port
+		# Initialize the server objects
 		self._port = port
 		self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		self._server.bind(('', port))
-		self._server.listen(5)
 		self._descriptors = [ self._server ]
-		logging.info('LANServer started on port %s', port)
 
 		# Initialize as a thread
 		self._kill_event = kill_event
@@ -77,33 +74,43 @@ class LANNetwork(threading.Thread):
 	def run(self):
 		# Open a listening socket
 		logging.debug('Starting LAN thread')
-		
-		# Loop until time to close
-		while not self._kill_event.is_set():
-			# Await for activity on the socket for a delay
-			(sread, swrite, sexc) = select.select(self._descriptors, [], [], SOCKET_DELAY)
-		 
-			# Iterate through any sockets with data to read
-			for sock in sread:
-				# Check socket type
-				if sock == self._server:	# Received a new connection
-					self._accept_new_connection()
-				else:	# Activity on an existing socket
-					# Read and check data on socket
-					sock_packet = sock.recv(SOCKET_MESSAGE_LENGTH)
-					host,port = sock.getpeername()
-					if not sock_packet:	# Socket closing
-						sock.close()
-						self._descriptors.remove(sock)
-						logging.debug('  Socket from %s:%s closing', host, port)
-					else:	# Data here to process, send to the message queue
-						logging.info('Received request from socket on %s:%s', host, port)
-						logging.debug('  Message from socket is %s', sock_packet)
-						self._handle_command(host, sock_packet)
-	
-		# Close the listening socket
-		self._server.shutdown(socket.SHUT_RDWR)
-		self._server.close()
+
+		try:
+			# Start listening socket
+			self._server.bind(('', self._port))
+			self._server.listen(5)
+			logging.info('LANServer started on port %s', self._port)
+
+			# Incoming message listening loop
+			while not self._kill_event.is_set():
+				# Await for activity on the socket for a delay
+				(sread, swrite, sexc) = select.select(self._descriptors, [], [], SOCKET_DELAY)
+
+				# Iterate through any sockets with data to read
+				for sock in sread:
+					# Check socket type
+					if sock == self._server:	# Received a new connection
+						self._accept_new_connection()
+					else:	# Activity on an existing socket
+						# Read and check data on socket
+						sock_packet = sock.recv(SOCKET_MESSAGE_LENGTH)
+						host,port = sock.getpeername()
+						if not sock_packet:	# Socket closing
+							sock.close()
+							self._descriptors.remove(sock)
+							logging.debug('  Socket from %s:%s closing', host, port)
+						else:	# Data here to process, send to the message queue
+							logging.info('Received request from socket on %s:%s', host, port)
+							logging.debug('  Message from socket is %s', sock_packet)
+							self._handle_command(host, sock_packet)
+		except socket.error as err:
+			logging.error('  Received listening socket error - %s - LAN thread shutting down', str(err))
+			# TODO - Update display to indicate the LAN is not connected
+		finally:
+			# Close the listening socket
+			self._server.shutdown(socket.SHUT_RDWR)
+			self._server.close()
+
 		logging.debug('LAN thread closing')
 
 	#---------------------------------------------------------------------------
