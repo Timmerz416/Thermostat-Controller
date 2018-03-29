@@ -118,13 +118,13 @@ class Thermostat(threading.Thread):
 
 		# Initialize the gpio
 		self._gpio_bus = pigpio.pi()
-		self._gpio_bus.set_mode(THERMO_POWER_PIN, pigpio.OUTPUT)
+#		self._gpio_bus.set_mode(THERMO_POWER_PIN, pigpio.OUTPUT)
 		self._gpio_bus.set_mode(RELAY_POWER_PIN, pigpio.OUTPUT)
-		self._gpio_bus.set_mode(RELAY_STATUS_PIN, pigpio.OUTPUT)
-		self._gpio_bus.set_mode(POWER_SWITCH_PIN, pigpio.INPUT)
+#		self._gpio_bus.set_mode(RELAY_STATUS_PIN, pigpio.OUTPUT)
+#		self._gpio_bus.set_mode(POWER_SWITCH_PIN, pigpio.INPUT)
 
 		# Initialize Sensors
-		self._lux_sensor = TSL2561(1)
+#		self._lux_sensor = TSL2561(1)
 		self._temp_sensor = HTU21D(1)
 
 		# Initialize as a thread
@@ -333,10 +333,10 @@ class Thermostat(threading.Thread):
 
 			# Update the power indicators
 			if PowerStatus == THERMOSTAT_ON:	# Turn on the LED
-				self._gpio_bus.write(THERMO_POWER_PIN, 1)	# Power up the button
+#				self._gpio_bus.write(THERMO_POWER_PIN, 1)	# Power up the button
 				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.PROGRAM_BTN, display.BTN_ON)))
 			else:	# Turn off the LED
-				self._gpio_bus.write(THERMO_POWER_PIN, 0)	# Power down the button
+#				self._gpio_bus.write(THERMO_POWER_PIN, 0)	# Power down the button
 				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.PROGRAM_BTN, display.BTN_OFF)))
 
 	#---------------------------------------------------------------------------
@@ -352,11 +352,11 @@ class Thermostat(threading.Thread):
 
 			# Update the power indicators
 			if RelayStatus == RELAY_ON:	# Close relay to turn on heat
-				self._gpio_bus.write(RELAY_STATUS_PIN, 1)
+#				self._gpio_bus.write(RELAY_STATUS_PIN, 1)
 				self._gpio_bus.write(RELAY_POWER_PIN, 0)
 				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.RELAY_LED, display.LED_ON)))
 			else:	# Open relay to turn off heat
-				self._gpio_bus.write(RELAY_STATUS_PIN, 0)
+#				self._gpio_bus.write(RELAY_STATUS_PIN, 0)
 				self._gpio_bus.write(RELAY_POWER_PIN, 1)
 				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.RELAY_LED, display.LED_OFF)))
 
@@ -462,13 +462,16 @@ class Thermostat(threading.Thread):
 	#---------------------------------------------------------------------------
 	def _update_database(self, temperature = 0.0):
 		# Get sensor data
+		logging.debug('  Current temperature passed to _update_database is %f', temperature)
 		cur_temp = self._temp_sensor.read_temperature() if temperature == 0.0 else temperature
-		cur_lux = self._lux_sensor.read_luminosity_opt()
+#		cur_lux = self._lux_sensor.read_luminosity_opt()
+		logging.debug('  Reading the humidity')
 		cur_h2o = self._temp_sensor.read_humidity()
 
 		# Create the data package
+		logging.debug('  Creating the data package')
 		cur_data = {'temperature': cur_temp,
-		            'luminosity_lux': cur_lux,
+#		            'luminosity_lux': cur_lux,
 		            'humidity': cur_h2o,
 		            'thermo_on': 1.0 if self._thermo_on else 0.0,
 		            'heating_on': 1.0 if self._relay_on else 0.0}
