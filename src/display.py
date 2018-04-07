@@ -356,15 +356,16 @@ class WeatherDisplay(threading.Thread):
 		self._logger.debug('Starting weather display thread')
 		while not self._kill_event.is_set():
 			# Get the latest weather as an xml printout
-			url_address = 'https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=cykz&hoursBeforeNow=2'
+			url_address = 'https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=cytz&hoursBeforeNow=2'
 			try:
+				self._logger.debug('  Getting weather from internet')
 				url_response = urllib2.urlopen(url_address)
 				xml_data = url_response.read()
-			except urllib2.URLError as error:
-				if hasattr(error, 'reason'):
-					self._logger.error('Could not reach the server: ', error.reason)
-				elif hasattr(error, 'code'):
-					self._logger.error('The server could not fulfill the request: ', error.code)
+			except urllib2.URLError as url_error:
+				if hasattr(url_error, 'reason'):
+					self._logger.error('  Could not reach the server: ', url_error.reason)
+				elif hasattr(url_error, 'code'):
+					self._logger.error('  The server could not fulfill the request: ', url_error.code)
 			else:
 				# Get the node with the most recent weather data
 				xml_root = ET.fromstring(xml_data)
@@ -374,48 +375,74 @@ class WeatherDisplay(threading.Thread):
 					new_icon = None
 
 					# Determine if there is precipitation (implies that we don't have to worry about cloud type, just type of precip)
+					self._logger.debug('  METAR present, checking for any precipitation')
 					if metar.find('./wx_string') is not None:  # We have possible precipitation, need to check the remarks
 						wx_string = metar.find('./wx_string').text  # Get the string describing conditions
+						self._logger.debug('    Found weather string: %s', wx_string)
 
 						# Check for types of rain
 						if 'TS' in wx_string:  # Check for thunderstorms
 							new_icon = WX_TSTORM
+							self._logger.debug('    Thunderstorms present')
 						elif 'FZ' in wx_string:  # Check for freezing rain
 							new_icon = WX_FZ_RAIN
+							self._logger.debug('    Freezing rain present')
 						elif 'SN' in wx_string:  # Check for snow
 							if 'SH' in wx_string:  # Further check for snow showers
 								new_icon = WX_SCAT_SNOW
+								self._logger.debug('    Scattered snow showers present')
 							else:
 								new_icon = WX_SNOW
+								self._logger.debug('    Snow present')
 						elif ('RA' in wx_string) or ('DZ' in wx_string):  # Finally, see if there is plain old rain
 							if 'SH' in wx_string:  # Further check for showers
 								new_icon = WX_SHOWERS
+								self._logger.debug('    Rain showers present')
 							else:
 								new_icon = WX_RAIN
+								self._logger.debug('    Rain present')
 
 					# If no icon found for precipitation, check cloud types
 					if new_icon is None:
 						# Get all sky conditions and iterate through them
+						self._logger.debug('  No precipitation present, checking cloud layers (assuming sunny skies to start)')
 						new_icon = WX_SUNNY  # Default to no coverage, or sunny skies
 						for layer in metar.findall('./sky_condition'):
+							self._logger.debug('    Evaluating layer %s at %s', layer.attrib['sky_cover'], layer.attrib['cloud_base_ft_agl'])
 							if layer.attrib['sky_cover'] == 'SKC' or layer.attrib['sky_cover'] == 'CLR':
 								# Call this condition sunny skies and break out of the loop (not likely needed)
 								new_icon = WX_SUNNY
+								self._logger.debug('    Confirmed clear skies')
 								break
-							elif int(layer.attrib['cloud_base_ft_agl']) <= 12000:  # Need to evaluate the work sky condition below 12,000 ft
+							elif int(layer.attrib['cloud_base_ft_agl']) <= 12000:  # Need to evaluate the sky condition below 12,000 ft
 								if layer.attrib['sky_cover'] == 'FEW':
-									if new_icon < WX_SUNNY: new_icon = WX_SUNNY  # Treat this as sunny skies
+									self._logger.debug('    Evaluating this few clouds layer')
+									if new_icon < WX_SUNNY:
+										new_icon = WX_SUNNY  # Treat this as sunny skies
+										self._logger.debug('      Icon will be updated to WX_SUNNY based on this layer')
 								elif layer.attrib['sky_cover'] == 'SCT':
-									if new_icon < WX_SCT_CLOUDS: new_icon = WX_SCT_CLOUDS
+									self._logger.debug('    Evaluating this scattered layer')
+									if new_icon < WX_SCT_CLOUDS:
+										new_icon = WX_SCT_CLOUDS
+										self._logger.debug('      Icon will be updated to WX_SCT_CLOUDS based on this layer')
 								elif layer.attrib['sky_cover'] == 'BKN':
-									if new_icon < WX_BKN_CLOUDS: new_icon = WX_BKN_CLOUDS
+									self._logger.debug('    Evaluating this broken layer')
+									if new_icon < WX_BKN_CLOUDS:
+										new_icon = WX_BKN_CLOUDS
+										self._logger.debug('      Icon will be updated to WX_BKN_CLOUDS based on this layer')
 								elif layer.attrib['sky_cover'] == 'OVC':
-									if new_icon < WX_OVC_CLOUDS: new_icon = WX_OVC_CLOUDS
+									self._logger.debug('    Evaluating this overcast layer')
+									if new_icon < WX_OVC_CLOUDS:
+										new_icon = WX_OVC_CLOUDS
+										self._logger.debug('      Icon will be updated to WX_OVC_CLOUDS based on this layer')
 
 					# Update the weather display if a new icon is needed
 					if self._current_icon != new_icon:
+						self._logger.debug('  Icon is different than currently displayed - display updating')
 						self._current_icon = new_icon
 						geniePi.genieWriteObj(geniePi.GENIE_OBJ_USERIMAGES, WEATHER_ADD, self._current_icon)
+					else:
+						self._logger.debug('  Icon is same as currently displayed - no display update')
 
 				else:  # No METAR information, so do not update the display
 					self._logger.debug('  No METAR data to update weather display.')
