@@ -76,7 +76,10 @@ class XBeeNetwork(threading.Thread):
 		# Set event handler and initialize class
 		self._ehandler = event_handler
 		self._qbase = query_base
-		
+
+		# Intialize logger
+		self._logger = logging.getLogger('MAIN.XBEE')
+
 		# Initialize as a thread
 		self._kill_event = kill_event
 		threading.Thread.__init__(self)
@@ -87,7 +90,7 @@ class XBeeNetwork(threading.Thread):
 	def run(self):
 		# types: (none) -> none
 		# Connect to the local XBee
-		logging.debug('Starting the XBee Network thread')
+		self._logger.debug('Starting the XBee Network thread')
 		serial_port = serial.Serial('/dev/ttyUSB0', 9600)
 		xbee = ZigBee(serial_port, callback=self._xbee_event)
 		
@@ -98,7 +101,7 @@ class XBeeNetwork(threading.Thread):
 		# Close the connection to the xbee
 		xbee.halt()
 		serial_port.close()
-		logging.debug('XBee Network thread closing')
+		self._logger.debug('XBee Network thread closing')
 	
 	#---------------------------------------------------------------------------
 	# _xbee_event Method
@@ -106,23 +109,23 @@ class XBeeNetwork(threading.Thread):
 	def _xbee_event(self, data):
 		# types: (dict) -> none
 		# Check the message type
-		logging.info('Received an XBee data packet')
+		self._logger.info('Received an XBee data packet')
 		if 'id' in data and data['id'] == 'rx':	# Sensor data received
 			# Create database update string and send to the database over the LAN
 			request_str = self._create_request(data)
 			if request_str:	# Something to send
 				# Send the message out to the database
-				logging.info('  Sending XBee data to be transmitted through the LAN')
+				self._logger.info('  Sending XBee data to be transmitted through the LAN')
 				self._ehandler(messaging.XBeeRxMessage(messaging.DBPacket(request_str)))
 
 				# Check to see if this is the outdoor sensor, and update display if it is
 				xbee_address = messaging.binary_print(data['source_addr_long'][-4:], '')
-				logging.debug('    Checking if %s is the outdoor sensor', xbee_address)
+				self._logger.debug('    Checking if %s is the outdoor sensor', xbee_address)
 				if xbee_address == config.outdoor_radio:  # outdoor_radio specified by user in config file
-					logging.debug('    Updating the display with the outdoor temperature')
+					self._logger.debug('    Updating the display with the outdoor temperature')
 					self._update_display(data)
 		else:	# Something else received
-			logging.warning('  Received something unexpected from the XBee network: %s', data)
+			self._logger.warning('  Received something unexpected from the XBee network: %s', data)
 
 	#---------------------------------------------------------------------------
 	# _create_request Method
@@ -130,25 +133,25 @@ class XBeeNetwork(threading.Thread):
 	def _create_request(self, data):
 		# types: (dict) -> string
 		# Initialize the response string
-		logging.debug('  Starting the creation of the database insert string')
+		self._logger.debug('  Starting the creation of the database insert string')
 		resp_str = self._qbase	# Set the base of the query
-		logging.debug('    Initial query string is: %s', resp_str)
+		self._logger.debug('    Initial query string is: %s', resp_str)
 
 		# Check for funny number of bytes
 		data_length = len(data['rf_data']) - 1
-		logging.debug('    Length of byte data in packet is %i', data_length)
+		self._logger.debug('    Length of byte data in packet is %i', data_length)
 		if data_length % 5:
-			logging.error('    Corrupted data transmitted through XBee network: incorrect XBee packet size')
+			self._logger.error('    Corrupted data transmitted through XBee network: incorrect XBee packet size')
 			resp_str = ''	# Empty string signals an error
 		else:
 			# Include the radio
-			logging.debug('    Adding radio id to the query string')
+			self._logger.debug('    Adding radio id to the query string')
 			resp_str += 'radio_id='
 			resp_str += messaging.binary_print(data['source_addr_long'][-4:], '')
 			
 			# Iterate through all the sensors adding data
 			num_sensors = data_length/5	# Data transferred in 5-byte chunks
-			logging.debug('    Adding data for %i sensors to the query string', num_sensors)
+			self._logger.debug('    Adding data for %i sensors to the query string', num_sensors)
 			for i in range(num_sensors):
 				# Read the first byte which gives the data type
 #				is_pressure = False
@@ -180,7 +183,7 @@ class XBeeNetwork(threading.Thread):
 					resp_str += '&override='
 #					is_override = True
 				else:	# Unrecognized
-					logging.error('    Unrecognized sensor data type: %i -> skipping data', type_byte)
+					self._logger.error('    Unrecognized sensor data type: %i -> skipping data', type_byte)
 					type_error = True
 				
 				# Convert the binary data to a float and add to string
@@ -189,7 +192,7 @@ class XBeeNetwork(threading.Thread):
 					resp_str += '%f' % float_value
 					
 		# Return the string
-		logging.debug('  Finished database insert string creation: %s', resp_str)
+		self._logger.debug('  Finished database insert string creation: %s', resp_str)
 		return resp_str
 
 	#---------------------------------------------------------------------------

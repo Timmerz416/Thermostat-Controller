@@ -116,6 +116,9 @@ class Thermostat(threading.Thread):
 		self._thermo_on = False  # Set so first call to _set_thermo_status turns on the thermostat
 		self._relay_on = True  # Set so first call to _set_relay_status turns off the relay
 
+		# Initialize logger
+		self._logger = logging.getLogger('MAIN.THERMO')
+
 		# Initialize the gpio
 		self._gpio_bus = pigpio.pi()
 #		self._gpio_bus.set_mode(THERMO_POWER_PIN, pigpio.OUTPUT)
@@ -136,7 +139,7 @@ class Thermostat(threading.Thread):
 	#---------------------------------------------------------------------------
 	def run(self):
 		# Connect to the GPIO bus
-		logging.debug('Starting thermostat thread')
+		self._logger.debug('Starting thermostat thread')
 		
 		# Initialize status of thermostat (set to on and relay closed)
 		self._set_thermo_status(THERMOSTAT_ON)
@@ -150,7 +153,7 @@ class Thermostat(threading.Thread):
 		# Loop until time to close
 		non_printing_loops = self._data_cycles
 		while not self._kill_event.is_set():
-			logging.info('Thermostat control cycle %i of %i initiated', non_printing_loops, self._data_cycles)
+			self._logger.info('Thermostat control cycle %i of %i initiated', non_printing_loops, self._data_cycles)
 			# Evaluate thermostat programming
 			force_print = False
 			if non_printing_loops == self._data_cycles:
@@ -166,7 +169,7 @@ class Thermostat(threading.Thread):
 		# Shutdown the GPIO bus
 		self._gpio_bus.stop()
 		
-		logging.debug('Thermostat thread closing')
+		self._logger.debug('Thermostat thread closing')
 
 	#---------------------------------------------------------------------------
 	# process_command Method
@@ -174,29 +177,29 @@ class Thermostat(threading.Thread):
 	def process_command(self, Packet):
 		# types: (DataPacket) -> none
 		# Check that the passed type is correct
-		logging.info('Thermostat received command and initiating processing')
+		self._logger.info('Thermostat received command and initiating processing')
 		if type(Packet.packet) is messaging.Command:
 			# Evaluate the type of command and get the response
 			send_response = Packet.host != 'DISPLAY'
 			cmd = Packet.packet
 			if cmd.command == CMD_THERMO_POWER:
-				logging.debug('  Request to change thermostat status received')
+				self._logger.debug('  Request to change thermostat status received')
 				response = self._update_thermo_status(Packet)
 			elif cmd.command == CMD_OVERRIDE:
-				logging.debug('  Request to change override status received')
+				self._logger.debug('  Request to change override status received')
 				response = self._update_override(Packet)
 			elif cmd.command == CMD_RULE_CHANGE:
-				logging.debug('  Request to change rule received - not yet implemented')  # TODO implement this functionality
+				self._logger.debug('  Request to change rule received - not yet implemented')  # TODO implement this functionality
 				response = messaging.DataPacket(Packet.Host, Packet.Port, 'TR:NACK')
 			elif cmd.command == CMD_TIME_REQUEST:
-				logging.debug('  Request for thermostat clock control received')
+				self._logger.debug('  Request for thermostat clock control received')
 				response = self._clock_control(Packet)
 			elif cmd.command == CMD_STATUS:
-				logging.debug('  Request for thermostat status received')
+				self._logger.debug('  Request for thermostat status received')
 				response = self._return_status(Packet)
 			elif cmd.command == CMD_SHUTDOWN:
 				# Force a shutdown
-				logging.info('  Request for thermostat shutdown')
+				self._logger.info('  Request for thermostat shutdown')
 				self._force_shutdown()
 				response = messaging.DataPacket(Packet.host, Packet.port, 'XX:ACK')
 
@@ -207,21 +210,20 @@ class Thermostat(threading.Thread):
 				kill_timer = threading.Timer(1, signal_kill)  # 1 second delay
 				kill_timer.start()
 			else:
-				logging.warning('  Unknown type of command received: %i - ignoring command', Packet.packet.command)
+				self._logger.warning('  Unknown type of command received: %i - ignoring command', Packet.packet.command)
 				send_response = False
 			
 			# Send response
 			if send_response:
-				logging.debug('  Sending Thermostat response to the LAN: %s', response.packet)
+				self._logger.debug('  Sending Thermostat response to the LAN: %s', response.packet)
 				self._ehandler(messaging.ThermostatRxMessage(response))
 		else:	# Incorrect type passed
-			logging.error('  Incorrect type of data passed to the thermostat - will not process')
+			self._logger.error('  Incorrect type of data passed to the thermostat - will not process')
 
 	#---------------------------------------------------------------------------
 	# _clock_control Method
 	#---------------------------------------------------------------------------
-	@staticmethod
-	def _clock_control(dpack):
+	def _clock_control(self, dpack):
 		# types: (DataPacket) -> DataPacket
 		# Check the command type
 		if dpack.packet.subcommand == STATUS_GET:
@@ -231,7 +233,7 @@ class Thermostat(threading.Thread):
 			# Create the response string
 			resp_str = 'CR:GET:%i:%i:%i:%i:%i:%i:%i' % (cur_dt.year, cur_dt.month, cur_dt.day, cur_dt.weekday(), cur_dt.hour, cur_dt.minute, cur_dt.second)
 		else:
-			logging.critical('  Unknown clock control made it to the thermostat - THIS SHOULD NOT HAPPEN')
+			self._logger.critical('  Unknown clock control made it to the thermostat - THIS SHOULD NOT HAPPEN')
 			return messaging.DataPacket(dpack.host, dpack.port, 'CR:NACK')
 		
 		# Return the acknowledgement/data
@@ -245,12 +247,12 @@ class Thermostat(threading.Thread):
 		# Check the status command
 		if dpack.packet.subcommand == STATUS_ON:
 			# Turn on the thermostat and evaluate relay status
-			logging.info('  Thermostat is turning on')
+			self._logger.info('  Thermostat is turning on')
 			self._set_thermo_status(THERMOSTAT_ON)
 			self._evaluate_programming(True)
 		else:
 			# Turn off the thermostat and open the relay
-			logging.info('  Thermostat is turning off')
+			self._logger.info('  Thermostat is turning off')
 			self._set_thermo_status(THERMOSTAT_OFF)
 			self._set_relay_status(RELAY_ON)
 			self._update_database()
@@ -279,14 +281,14 @@ class Thermostat(threading.Thread):
 			# Check the status command
 			if dpack.packet.subcommand == STATUS_ON:
 				# Set the override mode and setpoint
-				logging.info('  Thermostat is turning override mode on with setpoint %.2f', dpack.packet.data)
+				self._logger.info('  Thermostat is turning override mode on with setpoint %.2f', dpack.packet.data)
 				self._override_on = True
 				self._override_temp = dpack.packet.data
 				self._setpoint = self._override_temp
 				button_status = display.BTN_ON
 			else:
 				# Set override mode
-				logging.info('  Thermostat is turning override mode off')
+				self._logger.info('  Thermostat is turning override mode off')
 				self._override_on = False
 				button_status = display.BTN_OFF
 				if dpack.packet.data:
@@ -328,7 +330,7 @@ class Thermostat(threading.Thread):
 		# Check to see if anything needs to change
 		if self._thermo_on != PowerStatus:
 			# Update object status
-			logging.info('    Turning thermostat %s', 'on' if PowerStatus == THERMOSTAT_ON else 'off')
+			self._logger.info('    Turning thermostat %s', 'on' if PowerStatus == THERMOSTAT_ON else 'off')
 			self._thermo_on = PowerStatus
 
 			# Update the power indicators
@@ -347,7 +349,7 @@ class Thermostat(threading.Thread):
 		# Check if relay status is actually changing, and take action
 		if self._relay_on != RelayStatus:
 			# Update object status
-			logging.info('    Turning relay %s', 'on' if RelayStatus else 'off')
+			self._logger.info('    Turning relay %s', 'on' if RelayStatus else 'off')
 			self._relay_on = RelayStatus
 
 			# Update the power indicators
@@ -375,29 +377,29 @@ class Thermostat(threading.Thread):
 		cur_time = time.localtime()
 		cur_hour = cur_time.tm_hour + (60*cur_time.tm_min + cur_time.tm_sec)/3600.0
 		cur_day = cur_time.tm_wday
-		logging.debug('  Measured temperature %.2f Celsius on day %i at hour %.2f', cur_temp, cur_day, cur_hour)
+		self._logger.debug('  Measured temperature %.2f Celsius on day %i at hour %.2f', cur_temp, cur_day, cur_hour)
 
 		# Update the display with the current temperature
 		if self._indoor_temp_str != temp_str:
-			logging.debug('  Writing string %s to the display', temp_str)
+			self._logger.debug('  Writing string %s to the display', temp_str)
 			self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.INSIDE_TEMP, temp_str)))
 			self._indoor_temp_str = temp_str
 
 		# Temperature checks
 		# ----------------------------------------------------------------------
 		if cur_temp < MIN_TEMPERATURE:	# Temperature below limit, turn on relay
-			logging.debug('  Temperature below minimum temperature limit of %.2f Celsius', MIN_TEMPERATURE)
+			self._logger.debug('  Temperature below minimum temperature limit of %.2f Celsius', MIN_TEMPERATURE)
 			if not self._relay_on:	# Turn on the relay if it is off
 				self._set_relay_status(RELAY_ON)	# Turn on relay
 				update_db = True	# Update the database due to relay state change
 		elif cur_temp > MAX_TEMPERATURE:	# Temperature above limit, turn off relay
-			logging.debug('  Temperature above maximum temperature limit of %.2f Celsius', MAX_TEMPERATURE)
+			self._logger.debug('  Temperature above maximum temperature limit of %.2f Celsius', MAX_TEMPERATURE)
 			if self._relay_on:	# Turn off the relay if it is on
 				self._set_relay_status(RELAY_OFF)	# Turn off relay
 				update_db = True	# Update due to relay state change
 		elif self._override_on:	# Override is on, so evaluate against setpoint
 			# Evaluate against the override setpoint
-			logging.debug('  Override Mode On - Checking against override setpoint (%.2f)', self._setpoint)
+			self._logger.debug('  Override Mode On - Checking against override setpoint (%.2f)', self._setpoint)
 			if self._relay_on and (cur_temp > (self._setpoint + TEMPERATURE_BUFFER)):
 				# Temperature exceeds override, so turn off relay
 				self._set_relay_status(RELAY_OFF)
@@ -408,9 +410,9 @@ class Thermostat(threading.Thread):
 				update_db = True
 			else:
 				# No change
-				logging.debug('    Relay not changed')
+				self._logger.debug('    Relay not changed')
 		elif self._thermo_on:	# Temperature is within limits, so check against rules
-			logging.debug('  Programming Mode On - Checking against programmed rules')
+			self._logger.debug('  Programming Mode On - Checking against programmed rules')
 			rule_found = False	# Flag for finding the rule
 			while not rule_found:	# Iterate through the rules until one is found
 				for cur_rule in config.programming_rules:
@@ -418,17 +420,17 @@ class Thermostat(threading.Thread):
 						# Determine how to control the relay
 						if self._relay_on and (cur_temp > (cur_rule['temperature'] + TEMPERATURE_BUFFER)):
 							# Temperature exceeds rule, so turn off relay
-							logging.debug('    Relay turned off as temperature greater than setpoint (%.2f Celsius)', cur_rule['temperature'])
+							self._logger.debug('    Relay turned off as temperature greater than setpoint (%.2f Celsius)', cur_rule['temperature'])
 							self._set_relay_status(RELAY_OFF)
 							update_db = True
 						elif not self._relay_on and (cur_temp < (cur_rule['temperature'] - TEMPERATURE_BUFFER)):
 							# Temperature below rule, so turn on relay
-							logging.debug('    Relay turned on as temperature less than setpoint (%.2f Celsius)', cur_rule['temperature'])
+							self._logger.debug('    Relay turned on as temperature less than setpoint (%.2f Celsius)', cur_rule['temperature'])
 							self._set_relay_status(RELAY_ON)
 							update_db = True
 						else:
 							# No change
-							logging.debug('    Relay remains %s as setpoint is %.2f Celsius', 'on' if self._relay_on else 'off', cur_rule['temperature'])
+							self._logger.debug('    Relay remains %s as setpoint is %.2f Celsius', 'on' if self._relay_on else 'off', cur_rule['temperature'])
 						
 						# Rule found, so break from the loop
 						rule_found = True
@@ -436,14 +438,14 @@ class Thermostat(threading.Thread):
 						break
 				else:	# Rule not found
 					# Decrease the day, but increase the time
-					logging.debug('  Could not find the appropriate rule, moving back one day')
+					self._logger.debug('  Could not find the appropriate rule, moving back one day')
 					if cur_day == RULE_DAYS['Monday']:
 						cur_day = RULE_DAYS['Sunday']
 					else:
 						cur_day -= 1
 					cur_hour += 24.0
 		else:  # Thermostat is off, so no update
-			logging.debug('    Thermostat off - no change')
+			self._logger.debug('    Thermostat off - no change')
 			
 		# Send thermostat status to database
 		#-----------------------------------------------------------------------
@@ -462,24 +464,24 @@ class Thermostat(threading.Thread):
 	#---------------------------------------------------------------------------
 	def _update_database(self, temperature = 0.0):
 		# Get sensor data
-		logging.debug('  Current temperature passed to _update_database is %f', temperature)
+		self._logger.debug('  Current temperature passed to _update_database is %f', temperature)
 		cur_temp = self._temp_sensor.read_temperature() if temperature == 0.0 else temperature
 #		cur_lux = self._lux_sensor.read_luminosity_opt()
-		logging.debug('  Reading the humidity')
+		self._logger.debug('  Reading the humidity')
 		cur_h2o = self._temp_sensor.read_humidity()
 
 		# Create the data package
-		logging.debug('  Creating the data package')
+		self._logger.debug('  Creating the data package')
 		cur_data = {'temperature': cur_temp,
 #		            'luminosity_lux': cur_lux,
 		            'humidity': cur_h2o,
 		            'thermo_on': 1.0 if self._thermo_on else 0.0,
 		            'heating_on': 1.0 if self._relay_on else 0.0}
 		if self._override_on: cur_data['override'] = self._setpoint
-#		logging.debug('cur_data from thermostat._update_database: %s', cur_data)
+#		self._logger.debug('cur_data from thermostat._update_database: %s', cur_data)
 
 		# Send the data package message
-		logging.info('  Sending thermostat data to be transmitted through the LAN')
+		self._logger.info('  Sending thermostat data to be transmitted through the LAN')
 		request = self._create_request(cur_data)
 		self._ehandler(messaging.ThermostatRxMessage(messaging.DBPacket(request)))
 

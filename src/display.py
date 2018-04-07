@@ -105,6 +105,9 @@ class DisplayControl(threading.Thread):
 		self._display_error = False
 		self._setpoint = 15
 
+		# Initialize logger
+		self._logger = logging.getLogger('MAIN.DISPLAY')
+
 		# Initialize as a thread
 		self._kill_event = kill_event
 		threading.Thread.__init__(self)
@@ -115,10 +118,10 @@ class DisplayControl(threading.Thread):
 	def run(self):
 		# Connect to the display
 		if geniePi.genieSetup('/dev/serial0', 115200) < 0:  # Error occurred
-			logging.error('  Cannot connect to the display - it will be updated')
+			self._logger.error('  Cannot connect to the display - it will be updated')
 			self._display_error = True
 		else:	# Run the thread
-			logging.debug('  Connected to the display')
+			self._logger.debug('  Connected to the display')
 
 			# Create the reply structure
 			reply = geniePi.genieReplyStruct()
@@ -151,7 +154,7 @@ class DisplayControl(threading.Thread):
 									prev_override_status = BTN_OFF if reply.data else BTN_ON
 									geniePi.genieWriteObj(geniePi.GENIE_OBJ_4DBUTTON, OVER_BTN_ADD, prev_override_status)
 							else:
-								logging.error('  Unknown button pressed: %i.  No action taken', reply.index)
+								self._logger.error('  Unknown button pressed: %i.  No action taken', reply.index)
 						elif reply.object == geniePi.GENIE_OBJ_TRACKBAR:  # Slider interacted with
 							if reply.index == TRACKBAR_ADD:
 								# Update the internal setpoint register
@@ -159,15 +162,15 @@ class DisplayControl(threading.Thread):
 
 								# Update the thermostat controller iff override mode is on
 								override_status = geniePi.genieReadObj(geniePi.GENIE_OBJ_4DBUTTON, OVER_BTN_ADD)
-								logging.debug('    Current display override status: %i', override_status)
+								self._logger.debug('    Current display override status: %i', override_status)
 								if override_status:  # The override mode is on
 									self._update_override(override_status, self._setpoint)
 							else:
-								logging.error('  Unknown trackbar changes: %i.  No action taken', reply.index)
+								self._logger.error('  Unknown trackbar changes: %i.  No action taken', reply.index)
 						else:
-							logging.error('  Unknown object changed: %i.  No action taken', reply.object)
+							self._logger.error('  Unknown object changed: %i.  No action taken', reply.object)
 					else:   # Unknown item
-						logging.error('  Unknown display message type: %i.  No action taken', reply.cmd)
+						self._logger.error('  Unknown display message type: %i.  No action taken', reply.cmd)
 
 				# Wait for next message
 				self._kill_event.wait(0.02)	# Check every 20 milliseconds
@@ -177,7 +180,7 @@ class DisplayControl(threading.Thread):
 			clock_thread.join()
 		
 		# Indicate the thread is ending
-		logging.debug('Display thread closing')
+		self._logger.debug('Display thread closing')
 			
 	#---------------------------------------------------------------------------
 	# process_message Method
@@ -205,7 +208,7 @@ class DisplayControl(threading.Thread):
 			elif cur_cmd.subcommand == POWER_LED:
 				self._update_led(POWER_LED_ADD, cur_cmd.data)
 		else:
-			logging.error('  Display message unrecognized - no action taken')
+			self._logger.error('  Display message unrecognized - no action taken')
 
 	#---------------------------------------------------------------------------
 	# _update_power_btn Method
@@ -215,10 +218,10 @@ class DisplayControl(threading.Thread):
 		# Only update is the display is connected
 		if not self._display_error:
 			if status == BTN_ON:
-				logging.debug('  Received message to turn on a power button')
+				self._logger.debug('  Received message to turn on a power button')
 				geniePi.genieWriteObj(geniePi.GENIE_OBJ_4DBUTTON, address, BTN_ON)
 			else:
-				logging.debug('  Received message to turn off a power button')
+				self._logger.debug('  Received message to turn off a power button')
 				geniePi.genieWriteObj(geniePi.GENIE_OBJ_4DBUTTON, address, BTN_OFF)
 
 	#---------------------------------------------------------------------------
@@ -229,10 +232,10 @@ class DisplayControl(threading.Thread):
 		# Only update if the display is connected
 		if not self._display_error:
 			if status == LED_ON:
-				logging.debug('  Received message to turn on a LED')
+				self._logger.debug('  Received message to turn on a LED')
 				geniePi.genieWriteObj(geniePi.GENIE_OBJ_USER_LED, address, LED_ON)
 			else:
-				logging.debug('  Received message to turn off a LED')
+				self._logger.debug('  Received message to turn off a LED')
 				geniePi.genieWriteObj(geniePi.GENIE_OBJ_USER_LED, address, LED_OFF)
 
 	#---------------------------------------------------------------------------
@@ -293,6 +296,9 @@ class ClockController(threading.Thread):
 		self._display_error = display_error
 		self._prev_datetime = ''
 
+		# Initialize logger
+		self._logger = logging.getLogger('MAIN.DISPLAY.CLOCK')
+
 		# Initialize as a thread
 		threading.Thread.__init__(self)
 
@@ -301,7 +307,7 @@ class ClockController(threading.Thread):
 	#---------------------------------------------------------------------------
 	def run(self):
 		# Infinite look until event signalling exit
-		logging.debug('Starting clock thread')
+		self._logger.debug('Starting clock thread')
 		while not self._kill_event.is_set():
 			# Get the current time as a string, and update display if different
 			datetime_str = datetime.now().strftime('%A, %B %d  %H:%M')
@@ -312,7 +318,7 @@ class ClockController(threading.Thread):
 			# Delay between date string updates - will give reasonable lag for the clock update
 			self._kill_event.wait(1)  # 1 second
 
-		logging.debug('Clock thread exiting.')
+		self._logger.debug('Clock thread exiting.')
 
 
 #===============================================================================
@@ -336,6 +342,9 @@ class WeatherDisplay(threading.Thread):
 		self._prev_datetime = ''
 		self._current_icon = WX_SUNNY
 
+		# Initialize logger
+		self._logger = logging.getLogger('MAIN.DISPLAY.WEATHER')
+
 		# Initialize as a thread
 		threading.Thread.__init__(self)
 
@@ -344,7 +353,7 @@ class WeatherDisplay(threading.Thread):
 	#---------------------------------------------------------------------------
 	def run(self):
 		# Infinite look until event signalling exit
-		logging.debug('Starting weather display thread')
+		self._logger.debug('Starting weather display thread')
 		while not self._kill_event.is_set():
 			# Get the latest weather as an xml printout
 			url_address = 'https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=cykz&hoursBeforeNow=2'
@@ -353,9 +362,9 @@ class WeatherDisplay(threading.Thread):
 				xml_data = url_response.read()
 			except urllib2.URLError as error:
 				if hasattr(error, 'reason'):
-					logging.error('Could not reach the server: ', error.reason)
+					self._logger.error('Could not reach the server: ', error.reason)
 				elif hasattr(error, 'code'):
-					logging.error('The server could not fulfill the request: ', error.code)
+					self._logger.error('The server could not fulfill the request: ', error.code)
 			else:
 				# Get the node with the most recent weather data
 				xml_root = ET.fromstring(xml_data)
@@ -365,7 +374,7 @@ class WeatherDisplay(threading.Thread):
 					new_icon = None
 
 					# Determine if there is precipitation (implies that we don't have to worry about cloud type, just type of precip)
-					if metar.find('./wx_string') is not None:  # We have possible rain, need to check the remarks
+					if metar.find('./wx_string') is not None:  # We have possible precipitation, need to check the remarks
 						wx_string = metar.find('./wx_string').text  # Get the string describing conditions
 
 						# Check for types of rain
@@ -409,9 +418,9 @@ class WeatherDisplay(threading.Thread):
 						geniePi.genieWriteObj(geniePi.GENIE_OBJ_USERIMAGES, WEATHER_ADD, self._current_icon)
 
 				else:  # No METAR information, so do not update the display
-					logging.debug('  No METAR data to update weather display.')
+					self._logger.debug('  No METAR data to update weather display.')
 
 			# Delay between date string updates - will give reasonable lag for the clock update
 			self._kill_event.wait(15*60)  # 15 minutes
 
-		logging.debug('Weather display thread exiting.')
+		self._logger.debug('Weather display thread exiting.')

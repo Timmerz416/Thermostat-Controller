@@ -8,6 +8,7 @@ import lan_network
 import display
 import Queue
 import logging
+import logging.config
 import threading
 import argparse
 import config
@@ -43,7 +44,7 @@ def queue_message(in_msg):
 		# Add to the message list
 		message_list.put(in_msg)
 	else:
-		logging.warning('Wrong type (%s) sent to queue, message will be ignored', type(in_msg))
+		logger.warning('Wrong type (%s) sent to queue, message will be ignored', type(in_msg))
 
 # -------------------------------------------------------------------------------
 # dispatch_message Function
@@ -54,7 +55,7 @@ def dispatch_message(cur_msg):
 	msg_id = cur_msg.get_id()
 	if msg_id == messaging.XBEE_RX_MESSAGE:  # Received XBee data
 		# Since there should only be data messages here, send it through the LAN
-		logging.debug('  Received XBee transmission, sending to the LAN')
+		logger.debug('  Received XBee transmission, sending to the LAN')
 		queue_message(messaging.LANTxMessage(cur_msg.get_data()))
 
 	elif msg_id == messaging.XBEE_TX_MESSAGE:  # Transmit command to XBees
@@ -63,29 +64,29 @@ def dispatch_message(cur_msg):
 	elif msg_id == messaging.THERMO_RX_MESSAGE:  # Received thermostat message
 		# Check if it is a display message or not
 		if cur_msg.get_data() is messaging.DisplayPacket:
-			logging.debug('  Received Thermostat message - sending to the display')
+			logger.debug('  Received Thermostat message - sending to the display')
 			queue_message(messaging.DisplayTxMessage(cur_msg.get_data()))
 		else:
-			logging.debug('  Received Thermostat message - sending to the LAN')
+			logger.debug('  Received Thermostat message - sending to the LAN')
 			queue_message(messaging.LANTxMessage(cur_msg.get_data()))
 
 	elif msg_id == messaging.THERMO_TX_MESSAGE:  # Transmit thermostat command
-		logging.debug('  Sending Thermostat transmission request, forwarding to the Thermostat')
+		logger.debug('  Sending Thermostat transmission request, forwarding to the Thermostat')
 		thermo_thread.process_command(cur_msg.get_data())
 
 	elif msg_id == messaging.LAN_RX_MESSAGE:  # Received message from LAN
 		# Check for messages to handle in this
-		logging.debug('  Received LAN transmission')
+		logger.debug('  Received LAN transmission')
 		queue_message(messaging.ThermostatTxMessage(cur_msg.get_data()))
 
 	elif msg_id == messaging.LAN_TX_MESSAGE:  # Send a message over the LAN
 		# Send message over the LAN
-		logging.debug('  Received LAN transmission request for %s', 'database' if cur_msg.is_http() else 'socket')
+		logger.debug('  Received LAN transmission request for %s', 'database' if cur_msg.is_http() else 'socket')
 		if cur_msg.is_http():  # Database message via http
-			logging.info('Sending LAN transmission request via HTTP')
+			logger.info('Sending LAN transmission request via HTTP')
 			lan_success = lan_thread.send_http_request(cur_msg.get_data().packet)
 		else:
-			logging.info('Sending LAN transmission response via a socket')
+			logger.info('Sending LAN transmission response via a socket')
 			lan_success = lan_thread.send_socket_request(cur_msg.get_data())
 
 		# Process any errors
@@ -100,7 +101,7 @@ def dispatch_message(cur_msg):
 		display_thread.process_message(cur_msg.get_data())
 
 	else:  # Something not expected
-		logging.warning('Message queue contains unknown message type: %i', msg_id.get_id())
+		logger.warning('Message queue contains unknown message type: %i', msg_id.get_id())
 
 
 # ===============================================================================
@@ -114,8 +115,22 @@ args = parser.parse_args()
 
 # Initialize the logger
 log_level = logging.INFO if args.mode == 'NORMAL' else logging.DEBUG
-logging.basicConfig(format='[%(asctime)s] %(levelname)8s: %(message)s', level=log_level)
-logging.info('Starting up the program in %s mode.', 'Normal' if args.mode == 'NORMAL' else 'Debug')
+if log_level == logging.INFO:
+	logging.config.fileConfig('/home/tl1/.thermopi.conf')
+else:
+	logging.config.fileConfig('/home/tl1/.thermopi.debug.conf')
+logger = logging.getLogger('MAIN')
+
+#logger.setLevel(log_level)
+#
+# # Set the loggers handler and formatter
+# handler = logging.StreamHandler()  # Default handler for now
+# handler.setLevel(logging.DEBUG)
+# formatter = logging.Formatter('%(name)-22s [%(asctime)s] %(levelname)8s: %(message)s')
+# handler.setFormatter(formatter)
+# logger.addHandler(handler)
+
+logger.info('Starting up the program in %s mode.', 'Normal' if args.mode == 'NORMAL' else 'Debug')
 
 # Start the display
 display_thread = display.DisplayControl(queue_message, shutdown)
@@ -150,7 +165,7 @@ thermo_thread.join()
 display_thread.join()
 
 # Display any remaining items
-logging.info('Program closed with %i items in the queue', message_list.qsize())
+logger.info('Program closed with %i items in the queue', message_list.qsize())
 while not message_list.empty():
 	cur_message = message_list.get()
-	logging.info('  Message unprocessed: %s', cur_message.to_string())
+	logger.info('  Message unprocessed: %s', cur_message.to_string())

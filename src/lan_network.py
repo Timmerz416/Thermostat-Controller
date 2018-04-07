@@ -58,6 +58,9 @@ class LANNetwork(threading.Thread):
 	def __init__(self, event_handler, kill_event, port):
 		# Set event handler
 		self._ehandler = event_handler
+
+		# Initialize logger
+		self._logger = logging.getLogger('MAIN.LAN')
 		
 		# Initialize the server objects
 		self._port = port
@@ -73,13 +76,13 @@ class LANNetwork(threading.Thread):
 	#---------------------------------------------------------------------------
 	def run(self):
 		# Open a listening socket
-		logging.debug('Starting LAN thread')
+		self._logger.debug('Starting LAN thread')
 
 		try:
 			# Start listening socket
 			self._server.bind(('', self._port))
 			self._server.listen(5)
-			logging.info('LANServer started on port %s', self._port)
+			self._logger.info('LANServer started on port %s', self._port)
 
 			# Incoming message listening loop
 			while not self._kill_event.is_set():
@@ -98,20 +101,20 @@ class LANNetwork(threading.Thread):
 						if not sock_packet:	# Socket closing
 							sock.close()
 							self._descriptors.remove(sock)
-							logging.debug('  Socket from %s:%s closing', host, port)
+							self._logger.debug('  Socket from %s:%s closing', host, port)
 						else:	# Data here to process, send to the message queue
-							logging.info('Received request from socket on %s:%s', host, port)
-							logging.debug('  Message from socket is %s', sock_packet)
+							self._logger.info('Received request from socket on %s:%s', host, port)
+							self._logger.debug('  Message from socket is %s', sock_packet)
 							self._handle_command(host, sock_packet)
 		except socket.error as err:
-			logging.error('  Received listening socket error - %s - LAN thread shutting down', str(err))
+			self._logger.error('  Received listening socket error - %s - LAN thread shutting down', str(err))
 			# TODO - Update display to indicate the LAN is not connected
 		finally:
 			# Close the listening socket
 			self._server.shutdown(socket.SHUT_RDWR)
 			self._server.close()
 
-		logging.debug('LAN thread closing')
+		self._logger.debug('LAN thread closing')
 
 	#---------------------------------------------------------------------------
 	# _handle_command Method
@@ -126,50 +129,50 @@ class LANNetwork(threading.Thread):
 		if tokens[1] == 'TS':	# Thermostat power control
 			# Check if the command is to turn on the thermostat
 			if tokens[2] == 'ON':
-				logging.info('  Received LAN command to turn on the thermostat')
+				self._logger.info('  Received LAN command to turn on the thermostat')
 				cmd = messaging.Command(thermostat.CMD_THERMO_POWER, thermostat.STATUS_ON, None)
 			elif tokens[2] == 'OFF':
-				logging.info('  Received LAN command to turn off the thermostat')
+				self._logger.info('  Received LAN command to turn off the thermostat')
 				cmd = messaging.Command(thermostat.CMD_THERMO_POWER, thermostat.STATUS_OFF, None)
 			else:
-				logging.error('  Received unrecognized thermostat power command %s - no action taken', tokens[2])
+				self._logger.error('  Received unrecognized thermostat power command %s - no action taken', tokens[2])
 				command_error = True
 			
 		elif tokens[1] == 'PO':	# Program override
 			# Check if the command is to turn the override on
 			if tokens[2] == 'ON':
-				logging.info('  Received LAN command to turn on override mode with a setpoint of %s', tokens[3])
+				self._logger.info('  Received LAN command to turn on override mode with a setpoint of %s', tokens[3])
 				cmd = messaging.Command(thermostat.CMD_OVERRIDE, thermostat.STATUS_ON, float(tokens[3]))
 			elif tokens[2] == 'OFF':
-				logging.info('  Received LAN command to turn off override mode')
+				self._logger.info('  Received LAN command to turn off override mode')
 				cmd = messaging.Command(thermostat.CMD_OVERRIDE, thermostat.STATUS_OFF, float(tokens[3]) if len(tokens) >= 4 else None)
 			else:
-				logging.error('  Received unrecognized override command %s - no action taken', tokens[2])
+				self._logger.error('  Received unrecognized override command %s - no action taken', tokens[2])
 				command_error = True
 				
 		elif tokens[1] == 'TR':	# Thermostat rule change
-			logging.warning('  Thermostat rule change logic not implemented yet')
+			self._logger.warning('  Thermostat rule change logic not implemented yet')
 			command_error = True
 		
 		elif tokens[1] == 'CR':	# Clock control
 			# Check clock control command
 			if tokens[2] == 'GET':	# Get the current time information
-				logging.info('  Received LAN command to get the current thermostat time')
+				self._logger.info('  Received LAN command to get the current thermostat time')
 				cmd = messaging.Command(thermostat.CMD_TIME_REQUEST, thermostat.STATUS_GET, None)
 			else:
-				logging.error('  Received unrecognized clock control command %s - no action taken', tokens[2])
+				self._logger.error('  Received unrecognized clock control command %s - no action taken', tokens[2])
 				command_error = True
 			
 		elif tokens[1] == 'ST':	# Thermostat status
-			logging.info('  Received LAN command to return the status of the thermostat')
+			self._logger.info('  Received LAN command to return the status of the thermostat')
 			cmd = messaging.Command(thermostat.CMD_STATUS, None, None)
 			
 		elif tokens[1] == 'XX':	# Program shutdown
-			logging.info('  Received LAN command to shutdown the thermostat program')
+			self._logger.info('  Received LAN command to shutdown the thermostat program')
 			cmd = messaging.Command(thermostat.CMD_SHUTDOWN, None, None)
 			
 		else:	# Unrecognized command type
-			logging.warning('  Received LAN command %s was unexpected - no action taken', tokens[1])
+			self._logger.warning('  Received LAN command %s was unexpected - no action taken', tokens[1])
 			command_error = True
 		
 		# Pass the command on
@@ -186,16 +189,15 @@ class LANNetwork(threading.Thread):
 	def _accept_new_connection(self):
 		newsock, (remhost, remport) = self._server.accept()
 		self._descriptors.append(newsock)
-		logging.info('Accepted new connection from %s on port %s', remhost, remport)
+		self._logger.info('Accepted new connection from %s on port %s', remhost, remport)
 
 	#---------------------------------------------------------------------------
 	# send_http_request Method
 	#---------------------------------------------------------------------------
-	@staticmethod
-	def send_http_request(GetRequest):
+	def send_http_request(self, GetRequest):
 		# types: (string) -> boolean
 		# Create the HTTP server connection object
-		logging.debug('  Sending HTTP request to LAN: %s', GetRequest)
+		self._logger.debug('  Sending HTTP request to LAN: %s', GetRequest)
 		httpconn = httplib.HTTPConnection(config.DB_ADDRESS, timeout=5)  # Set timeout to 5 seconds
 		success = False  # Assume failure to connect and pass data
 		try:
@@ -205,17 +207,17 @@ class LANNetwork(threading.Thread):
 
 			# Process the response
 			if httpresp.reason == "OK":
-				logging.debug('    LAN HTTP response received: OK')
+				self._logger.debug('    LAN HTTP response received: OK')
 				success = True
 			else:
 				resp_data = httpresp.read()
-				logging.warning('  Issue with sent HTTP request (%s) returned: %s', GetRequest, resp_data)
+				self._logger.warning('  Issue with sent HTTP request (%s) returned: %s', GetRequest, resp_data)
 		except httplib.NotConnected:
-			logging.error('  Thermostat not connected to the HTTP destination %s - data not transmitted', config.DB_ADDRESS)
+			self._logger.error('  Thermostat not connected to the HTTP destination %s - data not transmitted', config.DB_ADDRESS)
 		except httplib.HTTPException as err:
-			logging.error('  Received HTTP error - %s - data not transmitted', str(err))
+			self._logger.error('  Received HTTP error - %s - data not transmitted', str(err))
 		except socket.error as serr:
-			logging.error('  Received socket error - %s - data not transmitted', str(serr))
+			self._logger.error('  Received socket error - %s - data not transmitted', str(serr))
 		finally:
 			httpconn.close()  # Close the http connection
 
@@ -224,8 +226,7 @@ class LANNetwork(threading.Thread):
 	#---------------------------------------------------------------------------
 	# send_socket_request Method
 	#---------------------------------------------------------------------------
-	@staticmethod
-	def send_socket_request(DPacket):
+	def send_socket_request(self, DPacket):
 		# types: (list, string) -> boolean
 		# Create the socket connection
 		client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -236,7 +237,7 @@ class LANNetwork(threading.Thread):
 			client.connect((DPacket.host, int(DPacket.port)))
 			client.send(DPacket.packet)
 		except socket.error as err:
-			logging.error('  Thermostat socket error writing to %s:%s - %s - data not transmitted', DPacket.host, DPacket.port, str(err))
+			self._logger.error('  Thermostat socket error writing to %s:%s - %s - data not transmitted', DPacket.host, DPacket.port, str(err))
 			success = False
 		finally:
 			client.shutdown(socket.SHUT_RDWR)
