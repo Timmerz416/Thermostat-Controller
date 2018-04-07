@@ -33,6 +33,8 @@ import messaging
 import geniePi
 import thermostat
 from datetime import datetime
+import urllib2
+import xml.etree.ElementTree as ET
 
 #===============================================================================
 # CONSTANTS
@@ -67,6 +69,18 @@ INSIDE_TEMP     = 5
 OUTSIDE_TEMP    = 6
 SETPOINT_TEMP   = 7
 POWER_LED       = 8
+
+# Weather Icon Addresses
+WX_SUNNY        =  0
+WX_SCT_CLOUDS   =  1
+WX_BKN_CLOUDS   =  2
+WX_OVC_CLOUDS   =  3
+WX_SHOWERS      =  4
+WX_RAIN         =  5
+WX_TSTORM       =  6
+WX_SCAT_SNOW    =  7
+WX_SNOW         =  8
+WX_FZ_RAIN      =  9
 
 #===============================================================================
 # DisplayControl Class
@@ -112,6 +126,10 @@ class DisplayControl(threading.Thread):
 			# Start the clock thread
 			clock_thread = ClockController(self._kill_event, self._display_error)
 			clock_thread.start()
+
+			# Start the weather display thread
+			weather_thread = WeatherDisplay(self._kill_event, self._display_error)
+			weather_thread.start()
 		
 			# Start infinite loop listening for messages from the display
 			while not self._kill_event.is_set():
@@ -155,6 +173,7 @@ class DisplayControl(threading.Thread):
 				self._kill_event.wait(0.02)	# Check every 20 milliseconds
 
 			# Cleanup the clock thread
+			weather_thread.join()
 			clock_thread.join()
 		
 		# Indicate the thread is ending
@@ -294,3 +313,105 @@ class ClockController(threading.Thread):
 			self._kill_event.wait(1)  # 1 second
 
 		logging.debug('Clock thread exiting.')
+
+
+#===============================================================================
+# WeatherDisplay Class
+#===============================================================================
+# Implements a class that updates the weather displayed on the screen
+#
+# Class Members
+#	_kill_event	    :	The event signaling a shutdown of the thread
+#	_display_error  : 	Indicates if there is an error with the display
+#   _current_icon   :   Indicates the icon that is currently displayed
+#
+class WeatherDisplay(threading.Thread):
+	#---------------------------------------------------------------------------
+	# Constructor
+	#---------------------------------------------------------------------------
+	def __init__(self, kill_event, display_error):
+		# Initialize variables
+		self._kill_event = kill_event
+		self._display_error = display_error
+		self._prev_datetime = ''
+		self._current_icon = WX_SUNNY
+
+		# Initialize as a thread
+		threading.Thread.__init__(self)
+
+	#---------------------------------------------------------------------------
+	# run method
+	#---------------------------------------------------------------------------
+	def run(self):
+		# Infinite look until event signalling exit
+		logging.debug('Starting weather display thread')
+		while not self._kill_event.is_set():
+			# Get the latest weather as an xml printout
+			url_address = 'https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString=cykz&hoursBeforeNow=2'
+			try:
+				url_response = urllib2.urlopen(url_address)
+				xml_data = url_response.read()
+			except urllib2.URLError as error:
+				if hasattr(error, 'reason'):
+					logging.error('Could not reach the server: ', e.reason)
+				elif hasattr(error, 'code'):
+					logging.error('The server could not fulfill the request: ', e.code)
+			else:
+				# Get the node with the most recent weather data
+				xml_root = ET.fromstring(xml_data)
+				metar_list = xml_root.findall('./data/METAR')
+				if len(metar_list) > 0:
+					metar = metar_list[0]  # Get the latest METAR update despite type (can include SPECI's)
+					new_icon = None
+
+					# Determine if there is precipitation (implies that we don't have to worry about cloud type, just type of precip)
+					if metar.find('./wx_string') is not None:  # We have possible rain, need to check the remarks
+						wx_string = metar.find('./wx_string').text  # Get the string describing conditions
+
+						# Check for types of rain
+						if 'TS' in wx_string:  # Check for thunderstorms
+							new_icon = WX_TSTORM
+						elif 'FZ' in wx_string:  # Check for freezing rain
+							new_icon = WX_FZ_RAIN
+						elif 'SN' in wx_string:  # Check for snow
+							if 'SH' in wx_string:  # Further check for snow showers
+								new_icon = WX_SCAT_SNOW
+							else:
+								new_icon = WX_SNOW
+						elif ('RA' in wx_string) or ('DZ' in wx_string):  # Finally, see if there is plain old rain
+							if 'SH' in wx_string:  # Further check for showers
+								new_icon = WX_SHOWERS
+							else:
+								new_icon = WX_RAIN
+
+					# If no icon found for precipitation, check cloud types
+					if new_icon is None:
+						# Get all sky conditions and iterate through them
+						new_icon = WX_SUNNY  # Default to no coverage, or sunny skies
+						for layer in metar.findall('./sky_condition'):
+							if layer.attrib['sky_cover'] == 'SKC' or layer.attrib['sky_cover'] == 'CLR':
+								# Call this condition sunny skies and break out of the loop (not likely needed)
+								new_icon = WX_SUNNY
+								break
+							elif int(layer.attrib['cloud_base_ft_agl']) <= 12000:  # Need to evaluate the work sky condition below 12,000 ft
+								if layer.attrib['sky_cover'] == 'FEW':
+									if new_icon < WX_SUNNY: new_icon = WX_SUNNY  # Treat this as sunny skies
+								elif layer.attrib['sky_cover'] == 'SCT':
+									if new_icon < WX_SCT_CLOUDS: new_icon = WX_SCT_CLOUDS
+								elif layer.attrib['sky_cover'] == 'BKN':
+									if new_icon < WX_BKN_CLOUDS: new_icon = WX_BKN_CLOUDS
+								elif layer.attrib['sky_cover'] == 'OVC':
+									if new_icon < WX_OVC_CLOUDS: new_icon = WX_OVC_CLOUDS
+
+					# Update the weather display if a new icon is needed
+					if self._current_icon != new_icon:
+						self._current_icon = new_icon
+						geniePi.genieWriteObj(geniePi.GENIE_OBJ_USERIMAGES, WEATHER_ADD, self._current_icon)
+
+				else:  # No METAR information, so do not update the display
+					logging.debug('  No METAR data to update weather display.')
+
+			# Delay between date string updates - will give reasonable lag for the clock update
+			self._kill_event.wait(15*60)  # 15 minutes
+
+		logging.debug('Weather display thread exiting.')
