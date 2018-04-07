@@ -34,7 +34,7 @@ import threading
 import time
 import display
 import config
-from tsl2561 import TSL2561
+#from tsl2561 import TSL2561
 from htu21d import HTU21D
 from datetime import datetime
 from simple_types import RULE_DAYS

@@ -353,9 +353,9 @@ class WeatherDisplay(threading.Thread):
 				xml_data = url_response.read()
 			except urllib2.URLError as error:
 				if hasattr(error, 'reason'):
-					logging.error('Could not reach the server: ', e.reason)
+					logging.error('Could not reach the server: ', error.reason)
 				elif hasattr(error, 'code'):
-					logging.error('The server could not fulfill the request: ', e.code)
+					logging.error('The server could not fulfill the request: ', error.code)
 			else:
 				# Get the node with the most recent weather data
 				xml_root = ET.fromstring(xml_data)
