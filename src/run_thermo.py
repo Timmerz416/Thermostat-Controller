@@ -7,7 +7,6 @@ import thermostat
 import lan_network
 import display
 import Queue
-import logging
 import logging.config
 import threading
 import argparse
@@ -120,15 +119,6 @@ if log_level == logging.INFO:
 else:
 	logging.config.fileConfig('/home/tl1/.thermopi.debug.conf')
 logger = logging.getLogger('MAIN')
-
-#logger.setLevel(log_level)
-#
-# # Set the loggers handler and formatter
-# handler = logging.StreamHandler()  # Default handler for now
-# handler.setLevel(logging.DEBUG)
-# formatter = logging.Formatter('%(name)-22s [%(asctime)s] %(levelname)8s: %(message)s')
-# handler.setFormatter(formatter)
-# logger.addHandler(handler)
 
 logger.info('Starting up the program in %s mode.', 'Normal' if args.mode == 'NORMAL' else 'Debug')
 
