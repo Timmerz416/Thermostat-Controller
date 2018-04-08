@@ -363,9 +363,9 @@ class WeatherDisplay(threading.Thread):
 				xml_data = url_response.read()
 			except urllib2.URLError as url_error:
 				if hasattr(url_error, 'reason'):
-					self._logger.error('  Could not reach the server: ', url_error.reason)
+					self._logger.error('  Could not reach the server: %s', url_error.reason)
 				elif hasattr(url_error, 'code'):
-					self._logger.error('  The server could not fulfill the request: ', url_error.code)
+					self._logger.error('  The server could not fulfill the request: %s', url_error.code)
 			else:
 				# Get the node with the most recent weather data
 				xml_root = ET.fromstring(xml_data)
@@ -408,13 +408,15 @@ class WeatherDisplay(threading.Thread):
 						self._logger.debug('  No precipitation present, checking cloud layers (assuming sunny skies to start)')
 						new_icon = WX_SUNNY  # Default to no coverage, or sunny skies
 						for layer in metar.findall('./sky_condition'):
-							self._logger.debug('    Evaluating layer %s at %s', layer.attrib['sky_cover'], layer.attrib['cloud_base_ft_agl'])
-							if layer.attrib['sky_cover'] == 'SKC' or layer.attrib['sky_cover'] == 'CLR':
-								# Call this condition sunny skies and break out of the loop (not likely needed)
-								new_icon = WX_SUNNY
-								self._logger.debug('    Confirmed clear skies')
-								break
+							if layer.attrib['cloud_base_ft_agl'] is None:  # Check that a cloud base is defined - won't be for clear skies
+								self._logger.debug('    Evaluating layer %s', layer.attrib['sky_cover'])
+								if layer.attrib['sky_cover'] == 'SKC' or layer.attrib['sky_cover'] == 'CLR':
+									# Call this condition sunny skies and break out of the loop (not likely needed)
+									new_icon = WX_SUNNY
+									self._logger.debug('    Confirmed clear skies')
+									break
 							elif int(layer.attrib['cloud_base_ft_agl']) <= 12000:  # Need to evaluate the sky condition below 12,000 ft
+								self._logger.debug('    Evaluating layer %s at %s', layer.attrib['sky_cover'], layer.attrib['cloud_base_ft_agl'])
 								if layer.attrib['sky_cover'] == 'FEW':
 									self._logger.debug('    Evaluating this few clouds layer')
 									if new_icon < WX_SUNNY:
@@ -435,6 +437,8 @@ class WeatherDisplay(threading.Thread):
 									if new_icon < WX_OVC_CLOUDS:
 										new_icon = WX_OVC_CLOUDS
 										self._logger.debug('      Icon will be updated to WX_OVC_CLOUDS based on this layer')
+							else:  # Level too high
+								self._logger.debug('  Layer %s with bases at %s ignored due to height', layer.attrib['sky_cover'], layer.attrib['cloud_base_ft_agl'])
 
 					# Update the weather display if a new icon is needed
 					if self._current_icon != new_icon:
