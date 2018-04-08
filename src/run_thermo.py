@@ -10,7 +10,7 @@ import Queue
 import logging.config
 import threading
 import argparse
-import config
+import yaml
 
 # ===============================================================================
 # CONSTANTS
@@ -31,6 +31,7 @@ DEBUG_DB_UPLOAD = '/db_test_upload.php?'
 # ===============================================================================
 message_list = Queue.Queue()
 shutdown = threading.Event()
+config = None  # Contains the settings read from the config file
 
 # ===============================================================================
 # FUNCTIONS
@@ -115,12 +116,17 @@ args = parser.parse_args()
 # Initialize the logger
 log_level = logging.INFO if args.mode == 'NORMAL' else logging.DEBUG
 if log_level == logging.INFO:
-	logging.config.fileConfig('/home/tl1/.thermopi.conf')
+	logging.config.fileConfig('/home/tl1/.thermopi.logger.conf')
 else:
-	logging.config.fileConfig('/home/tl1/.thermopi.debug.conf')
+	logging.config.fileConfig('/home/tl1/.thermopi.logger.debug.conf')
 logger = logging.getLogger('MAIN')
 
 logger.info('Starting up the program in %s mode.', 'Normal' if args.mode == 'NORMAL' else 'Debug')
+
+# Read in the configuration file
+config_file = '/home/tl1/.thermopi.conf' if args.mode == 'NORMAL' else '/home/tl1/.thermopi.debug.conf'
+with open(config_file, 'r') as ymlfile:
+	config = yaml.load(ymlfile)
 
 # Start the display
 display_thread = display.DisplayControl(queue_message, shutdown)
@@ -130,15 +136,15 @@ display_thread.start()
 sensor_delay = NORM_SENSOR_DELAY if args.mode == 'NORMAL' else DEBUG_SENSOR_DELAY
 control_interval = NORM_CONTROL_INTERVAL if args.mode == 'NORMAL' else DEBUG_CONTROL_INTERVAL
 db_upload_string = NORM_DB_UPLOAD if args.mode == 'NORMAL' else DEBUG_DB_UPLOAD
-thermo_thread = thermostat.Thermostat(queue_message, shutdown, sensor_delay, control_interval, db_upload_string)
+thermo_thread = thermostat.Thermostat(queue_message, shutdown, sensor_delay, control_interval, db_upload_string, config)
 thermo_thread.start()
 
 # Start the LAN network
-lan_thread = lan_network.LANNetwork(queue_message, shutdown, config.SERVER_PORT)
+lan_thread = lan_network.LANNetwork(queue_message, shutdown, config['server_port'], config['db_address'])
 lan_thread.start()
 
 # Start the xbee network
-xbee_thread = xbee_network.XBeeNetwork(queue_message, shutdown, db_upload_string)
+xbee_thread = xbee_network.XBeeNetwork(queue_message, shutdown, db_upload_string, config['outdoor_radio'])
 xbee_thread.start()
 
 # Loop to check the status of the queue and dispatch messages

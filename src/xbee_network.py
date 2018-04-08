@@ -34,7 +34,6 @@ import threading
 import messaging
 import logging
 import struct
-import config
 import display
 
 #===============================================================================
@@ -71,11 +70,12 @@ class XBeeNetwork(threading.Thread):
 	# Constructor
 	#---------------------------------------------------------------------------
 	#
-	def __init__(self, event_handler, kill_event, query_base):
+	def __init__(self, event_handler, kill_event, query_base, radio_id):
 		# types: (callback, event) -> none
 		# Set event handler and initialize class
 		self._ehandler = event_handler
 		self._qbase = query_base
+		self._outdoor_radio = radio_id
 
 		# Intialize logger
 		self._logger = logging.getLogger('MAIN.XBEE')
@@ -121,7 +121,7 @@ class XBeeNetwork(threading.Thread):
 				# Check to see if this is the outdoor sensor, and update display if it is
 				xbee_address = messaging.binary_print(data['source_addr_long'][-4:], '')
 				self._logger.debug('    Checking if %s is the outdoor sensor', xbee_address)
-				if xbee_address == config.outdoor_radio:  # outdoor_radio specified by user in config file
+				if xbee_address == self._outdoor_radio:
 					self._logger.debug('    Updating the display with the outdoor temperature')
 					self._update_display(data)
 		else:	# Something else received

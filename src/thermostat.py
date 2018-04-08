@@ -33,7 +33,6 @@ import pigpio
 import threading
 import time
 import display
-import config
 #from tsl2561 import TSL2561
 from htu21d import HTU21D
 from datetime import datetime
@@ -101,7 +100,7 @@ class Thermostat(threading.Thread):
 	#---------------------------------------------------------------------------
 	# Constructor
 	#---------------------------------------------------------------------------
-	def __init__(self, event_handler, kill_event, sensor_period, data_cycles, query_base):
+	def __init__(self, event_handler, kill_event, sensor_period, data_cycles, query_base, user_config):
 		# Set event handler
 		self._ehandler = event_handler
 		self._sensor_period = sensor_period
@@ -115,6 +114,7 @@ class Thermostat(threading.Thread):
 		self._qbase = query_base
 		self._thermo_on = False  # Set so first call to _set_thermo_status turns on the thermostat
 		self._relay_on = True  # Set so first call to _set_relay_status turns off the relay
+		self._user_config = user_config
 
 		# Initialize logger
 		self._logger = logging.getLogger('MAIN.THERMO')
@@ -415,7 +415,7 @@ class Thermostat(threading.Thread):
 			self._logger.debug('  Programming Mode On - Checking against programmed rules')
 			rule_found = False	# Flag for finding the rule
 			while not rule_found:	# Iterate through the rules until one is found
-				for cur_rule in config.programming_rules:
+				for cur_rule in self._user_config['programming_rules']:
 					if self._rule_applies(cur_rule, cur_day, cur_hour): # Rule applies
 						# Determine how to control the relay
 						if self._relay_on and (cur_temp > (cur_rule['temperature'] + TEMPERATURE_BUFFER)):
@@ -494,7 +494,7 @@ class Thermostat(threading.Thread):
 		resp_str = self._qbase	# Set the base of the query
 
 		# Include the radio
-		resp_str += 'radio_id=' + config.THERMO_RADIO
+		resp_str += 'radio_id=' + self._user_config['thermo_radio']
 			
 		# Iterate through all the sensors adding data
 		for key, value in data.iteritems():
@@ -512,9 +512,9 @@ class Thermostat(threading.Thread):
 		# First check is to see that time is later than the rule
 		if hour >= rule['time']:
 			# Second round of checks
-			if rule['day'] == RULE_DAYS['Everyday']: return True
-			if weekday == rule['day']: return True
-			if (rule['day'] == RULE_DAYS['Weekdays']) and (weekday <= RULE_DAYS['Friday']): return True
-			if (rule['day'] == RULE_DAYS['Weekends']) and (weekday >= RULE_DAYS['Saturday']): return True
+			if RULE_DAYS[rule['day']] == RULE_DAYS['Everyday']: return True
+			if weekday == RULE_DAYS[rule['day']]: return True
+			if (RULE_DAYS[rule['day']] == RULE_DAYS['Weekdays']) and (weekday <= RULE_DAYS['Friday']): return True
+			if (RULE_DAYS[rule['day']] == RULE_DAYS['Weekends']) and (weekday >= RULE_DAYS['Saturday']): return True
 		
 		return False	# Rule does not match

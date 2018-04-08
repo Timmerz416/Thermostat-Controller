@@ -34,7 +34,6 @@ import logging
 import socket
 import select
 import thermostat
-import config
 
 #===============================================================================
 # CONSTANTS
@@ -55,7 +54,7 @@ class LANNetwork(threading.Thread):
 	# Constructor
 	#---------------------------------------------------------------------------
 	#
-	def __init__(self, event_handler, kill_event, port):
+	def __init__(self, event_handler, kill_event, server_port, db_address):
 		# Set event handler
 		self._ehandler = event_handler
 
@@ -63,9 +62,12 @@ class LANNetwork(threading.Thread):
 		self._logger = logging.getLogger('MAIN.LAN')
 		
 		# Initialize the server objects
-		self._port = port
+		self._port = server_port
 		self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self._descriptors = [ self._server ]
+
+		# Set database address on the LAN
+		self._db_address = db_address
 
 		# Initialize as a thread
 		self._kill_event = kill_event
@@ -198,7 +200,7 @@ class LANNetwork(threading.Thread):
 		# types: (string) -> boolean
 		# Create the HTTP server connection object
 		self._logger.debug('  Sending HTTP request to LAN: %s', GetRequest)
-		httpconn = httplib.HTTPConnection(config.DB_ADDRESS, timeout=5)  # Set timeout to 5 seconds
+		httpconn = httplib.HTTPConnection(self._db_address, timeout=5)  # Set timeout to 5 seconds
 		success = False  # Assume failure to connect and pass data
 		try:
 			# Send request and read response
@@ -213,7 +215,7 @@ class LANNetwork(threading.Thread):
 				resp_data = httpresp.read()
 				self._logger.warning('  Issue with sent HTTP request (%s) returned: %s', GetRequest, resp_data)
 		except httplib.NotConnected:
-			self._logger.error('  Thermostat not connected to the HTTP destination %s - data not transmitted', config.DB_ADDRESS)
+			self._logger.error('  Thermostat not connected to the HTTP destination %s - data not transmitted', self._db_address)
 		except httplib.HTTPException as err:
 			self._logger.error('  Received HTTP error - %s - data not transmitted', str(err))
 		except socket.error as serr:
