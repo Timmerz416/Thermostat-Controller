@@ -116,7 +116,7 @@ class XBeeNetwork(threading.Thread):
 			if request_str:	# Something to send
 				# Send the message out to the database
 				self._logger.info('  Sending XBee data to be transmitted through the LAN')
-				self._ehandler(messaging.XBeeRxMessage(messaging.DBPacket(request_str)))
+				self._ehandler(messaging.LANTxMessage(messaging.DBPacket(request_str)))
 
 				# Check to see if this is the outdoor sensor, and update display if it is
 				xbee_address = messaging.binary_print(data['source_addr_long'][-4:], '')

@@ -32,14 +32,10 @@
 #===============================================================================
 #Message IDs
 MESSAGE_ERROR		=  0
-XBEE_RX_MESSAGE		=  1
-XBEE_TX_MESSAGE		=  2
-THERMO_RX_MESSAGE	=  3
-THERMO_TX_MESSAGE	=  4
-LAN_RX_MESSAGE		=  5
-LAN_TX_MESSAGE		=  6
-DISPLAY_RX_MESSAGE	=  7
-DISPLAY_TX_MESSAGE	=  8
+XBEE_TX_MESSAGE		=  1
+THERMO_TX_MESSAGE	=  2
+LAN_TX_MESSAGE		=  3
+DISPLAY_TX_MESSAGE	=  4
 
 
 #===============================================================================
@@ -99,35 +95,6 @@ class Message(object):
 	#---------------------------------------------------------------------------
 	def get_data(self):
 		return self._data
-
-
-#===============================================================================
-# XBeeRxMessage Class
-#===============================================================================
-# Class for handling received XBee messages
-class XBeeRxMessage(Message):
-	#---------------------------------------------------------------------------
-	# Constructor
-	#---------------------------------------------------------------------------
-	def __init__(self, Packet):
-		# types: (DataPacket) -> none
-		# Initialize members - TODO To CHECK FOR DataPacket TYPE
-		Message.__init__(self, XBEE_RX_MESSAGE, Packet)
-
-
-#===============================================================================
-# ThermostatRxMessage
-#===============================================================================
-# Class for handling messages from the thermostat.  They could either be data
-# messages for the database, or a response through a socket
-class ThermostatRxMessage(Message):
-	#---------------------------------------------------------------------------
-	# Constructor
-	#---------------------------------------------------------------------------
-	def __init__(self, Packet):
-		# types: (DataPacket) -> none
-		# Initialize members - TODO TO CHECK FOR DataPacket TYPE
-		Message.__init__(self, THERMO_RX_MESSAGE, Packet)
 
 
 #===============================================================================
@@ -220,27 +187,6 @@ class DisplayPacket(DataPacket):
 
 
 #===============================================================================
-# LANRxMessage Class
-#===============================================================================
-# Class that contains a message from a socket on the LAN
-class LANRxMessage(Message):
-	#---------------------------------------------------------------------------
-	# Constructor
-	#---------------------------------------------------------------------------
-	def __init__(self, Packet):
-		# types: (DataPacket) -> none
-		# Initialize members - TODO TO CHECK FOR DataPacket TYPE
-		Message.__init__(self, LAN_RX_MESSAGE, Packet)
-
-	#---------------------------------------------------------------------------
-	# get_command Method
-	#---------------------------------------------------------------------------
-	def get_command(self):
-		# types: (none) -> Command
-		return self._data.packet
-		
-
-#===============================================================================
 # LANTxMessage Class
 #===============================================================================
 # Class for contains messages going to the LAN.  These could either be for the
@@ -280,17 +226,3 @@ class DisplayTxMessage(Message):
 		# types: (Command) -> none
 		# Initialize members - TODO To CHECK FOR DataPacket TYPE
 		Message.__init__(self, DISPLAY_TX_MESSAGE, DisplayPacket(command))
-
-
-#===============================================================================
-# DisplayRxMessage Class
-#===============================================================================
-# Class contains messages from the 4D display.
-class DisplayRxMessage(Message):
-	#---------------------------------------------------------------------------
-	# Constructor
-	#---------------------------------------------------------------------------
-	def __init__(self, Packet):
-		# types: (DataPacket) -> none
-		# Initialize members - TODO TO CHECK FOR DataPacket TYPE
-		Message.__init__(self, DISPLAY_RX_MESSAGE, Packet)

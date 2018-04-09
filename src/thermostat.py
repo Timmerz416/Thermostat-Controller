@@ -216,7 +216,7 @@ class Thermostat(threading.Thread):
 			# Send response
 			if send_response:
 				self._logger.debug('  Sending Thermostat response to the LAN: %s', response.packet)
-				self._ehandler(messaging.ThermostatRxMessage(response))
+				self._ehandler(messaging.LANTxMessage(response))
 		else:	# Incorrect type passed
 			self._logger.error('  Incorrect type of data passed to the thermostat - will not process')
 
@@ -483,7 +483,7 @@ class Thermostat(threading.Thread):
 		# Send the data package message
 		self._logger.info('  Sending thermostat data to be transmitted through the LAN')
 		request = self._create_request(cur_data)
-		self._ehandler(messaging.ThermostatRxMessage(messaging.DBPacket(request)))
+		self._ehandler(messaging.LANTxMessage(messaging.DBPacket(request)))
 
 	#---------------------------------------------------------------------------
 	# _create_request Method

@@ -179,7 +179,7 @@ class LANNetwork(threading.Thread):
 		
 		# Pass the command on
 		if not command_error:
-			self._ehandler(messaging.LANRxMessage(messaging.DataPacket(host_address, tokens[0], cmd)))
+			self._ehandler(messaging.ThermostatTxMessage(messaging.DataPacket(host_address, tokens[0], cmd)))
 		else:
 			err_response = tokens[1]
 			err_response += ':NACK' if tokens[1] else 'NACK'
