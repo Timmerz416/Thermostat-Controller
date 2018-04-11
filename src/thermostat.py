@@ -72,6 +72,7 @@ THERMOSTAT_OFF		= RELAY_OFF
 MIN_TEMPERATURE		= 10.0	# Below this temperature, the relay opens no matter the programming
 MAX_TEMPERATURE 	= 25.0	# Above this temperature, the relay closes no matter the programming
 TEMPERATURE_BUFFER	=  0.15	# The buffer to apply in the thermostat set target in evaluation relay
+ABSOLUTE_ZERO       = -273.0  # Default value for temperature that would signal no data
 
 # GPIO Pins
 THERMO_POWER_PIN	= 21
@@ -368,122 +369,140 @@ class Thermostat(threading.Thread):
 	def _evaluate_programming(self, ForceUpdate = False):
 		# types: (boolean) -> none
 		# Read the current temperature
-		cur_temp = self._temp_sensor.read_temperature()
-		self._temperature = cur_temp	# Store the last temperature read
-		temp_str = '%.1f' % cur_temp
-		update_db = ForceUpdate
+		try:  # Protect against I2C communication error
+			cur_temp = self._temp_sensor.read_temperature()
+			self._temperature = cur_temp	# Store the last temperature read
+			temp_str = '%.1f' % cur_temp
+			update_db = ForceUpdate
+		except pigpio.error:
+			self._logger.critical('  ERROR READING TEMPERATURE DURING CONTROL LOOP - SKIPPING THERMOSTAT EVALUATION')
+		else:
+			# Get the current time
+			cur_time = time.localtime()
+			cur_hour = cur_time.tm_hour + (60*cur_time.tm_min + cur_time.tm_sec)/3600.0
+			cur_day = cur_time.tm_wday
+			self._logger.debug('  Measured temperature %.2f Celsius on day %i at hour %.2f', cur_temp, cur_day, cur_hour)
 
-		# Get the current time
-		cur_time = time.localtime()
-		cur_hour = cur_time.tm_hour + (60*cur_time.tm_min + cur_time.tm_sec)/3600.0
-		cur_day = cur_time.tm_wday
-		self._logger.debug('  Measured temperature %.2f Celsius on day %i at hour %.2f', cur_temp, cur_day, cur_hour)
+			# Update the display with the current temperature
+			if self._indoor_temp_str != temp_str:
+				self._logger.debug('  Writing string %s to the display', temp_str)
+				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.INSIDE_TEMP, temp_str)))
+				self._indoor_temp_str = temp_str
 
-		# Update the display with the current temperature
-		if self._indoor_temp_str != temp_str:
-			self._logger.debug('  Writing string %s to the display', temp_str)
-			self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.INSIDE_TEMP, temp_str)))
-			self._indoor_temp_str = temp_str
+			# Temperature checks
+			# ----------------------------------------------------------------------
+			if cur_temp < MIN_TEMPERATURE:	# Temperature below limit, turn on relay
+				self._logger.debug('  Temperature below minimum temperature limit of %.2f Celsius', MIN_TEMPERATURE)
+				if not self._relay_on:	# Turn on the relay if it is off
+					self._set_relay_status(RELAY_ON)	# Turn on relay
+					update_db = True	# Update the database due to relay state change
+			elif cur_temp > MAX_TEMPERATURE:	# Temperature above limit, turn off relay
+				self._logger.debug('  Temperature above maximum temperature limit of %.2f Celsius', MAX_TEMPERATURE)
+				if self._relay_on:	# Turn off the relay if it is on
+					self._set_relay_status(RELAY_OFF)	# Turn off relay
+					update_db = True	# Update due to relay state change
+			elif self._override_on:	# Override is on, so evaluate against setpoint
+				# Evaluate against the override setpoint
+				self._logger.debug('  Override Mode On - Checking against override setpoint (%.2f)', self._setpoint)
+				if self._relay_on and (cur_temp > (self._setpoint + TEMPERATURE_BUFFER)):
+					# Temperature exceeds override, so turn off relay
+					self._set_relay_status(RELAY_OFF)
+					update_db = True
+				elif not self._relay_on and (cur_temp < (self._setpoint - TEMPERATURE_BUFFER)):
+					# Temperature below override, so turn on relay
+					self._set_relay_status(RELAY_ON)
+					update_db = True
+				else:
+					# No change
+					self._logger.debug('    Relay not changed')
+			elif self._thermo_on:	# Temperature is within limits, so check against rules
+				self._logger.debug('  Programming Mode On - Checking against programmed rules')
+				rule_found = False	# Flag for finding the rule
+				while not rule_found:	# Iterate through the rules until one is found
+					for cur_rule in self._user_config['programming_rules']:
+						if self._rule_applies(cur_rule, cur_day, cur_hour): # Rule applies
+							# Determine how to control the relay
+							if self._relay_on and (cur_temp > (cur_rule['temperature'] + TEMPERATURE_BUFFER)):
+								# Temperature exceeds rule, so turn off relay
+								self._logger.debug('    Relay turned off as temperature greater than setpoint (%.2f Celsius)', cur_rule['temperature'])
+								self._set_relay_status(RELAY_OFF)
+								update_db = True
+							elif not self._relay_on and (cur_temp < (cur_rule['temperature'] - TEMPERATURE_BUFFER)):
+								# Temperature below rule, so turn on relay
+								self._logger.debug('    Relay turned on as temperature less than setpoint (%.2f Celsius)', cur_rule['temperature'])
+								self._set_relay_status(RELAY_ON)
+								update_db = True
+							else:
+								# No change
+								self._logger.debug('    Relay remains %s as setpoint is %.2f Celsius', 'on' if self._relay_on else 'off', cur_rule['temperature'])
 
-		# Temperature checks
-		# ----------------------------------------------------------------------
-		if cur_temp < MIN_TEMPERATURE:	# Temperature below limit, turn on relay
-			self._logger.debug('  Temperature below minimum temperature limit of %.2f Celsius', MIN_TEMPERATURE)
-			if not self._relay_on:	# Turn on the relay if it is off
-				self._set_relay_status(RELAY_ON)	# Turn on relay
-				update_db = True	# Update the database due to relay state change
-		elif cur_temp > MAX_TEMPERATURE:	# Temperature above limit, turn off relay
-			self._logger.debug('  Temperature above maximum temperature limit of %.2f Celsius', MAX_TEMPERATURE)
-			if self._relay_on:	# Turn off the relay if it is on
-				self._set_relay_status(RELAY_OFF)	# Turn off relay
-				update_db = True	# Update due to relay state change
-		elif self._override_on:	# Override is on, so evaluate against setpoint
-			# Evaluate against the override setpoint
-			self._logger.debug('  Override Mode On - Checking against override setpoint (%.2f)', self._setpoint)
-			if self._relay_on and (cur_temp > (self._setpoint + TEMPERATURE_BUFFER)):
-				# Temperature exceeds override, so turn off relay
-				self._set_relay_status(RELAY_OFF)
-				update_db = True
-			elif not self._relay_on and (cur_temp < (self._setpoint - TEMPERATURE_BUFFER)):
-				# Temperature below override, so turn on relay
-				self._set_relay_status(RELAY_ON)
-				update_db = True
-			else:
-				# No change
-				self._logger.debug('    Relay not changed')
-		elif self._thermo_on:	# Temperature is within limits, so check against rules
-			self._logger.debug('  Programming Mode On - Checking against programmed rules')
-			rule_found = False	# Flag for finding the rule
-			while not rule_found:	# Iterate through the rules until one is found
-				for cur_rule in self._user_config['programming_rules']:
-					if self._rule_applies(cur_rule, cur_day, cur_hour): # Rule applies
-						# Determine how to control the relay
-						if self._relay_on and (cur_temp > (cur_rule['temperature'] + TEMPERATURE_BUFFER)):
-							# Temperature exceeds rule, so turn off relay
-							self._logger.debug('    Relay turned off as temperature greater than setpoint (%.2f Celsius)', cur_rule['temperature'])
-							self._set_relay_status(RELAY_OFF)
-							update_db = True
-						elif not self._relay_on and (cur_temp < (cur_rule['temperature'] - TEMPERATURE_BUFFER)):
-							# Temperature below rule, so turn on relay
-							self._logger.debug('    Relay turned on as temperature less than setpoint (%.2f Celsius)', cur_rule['temperature'])
-							self._set_relay_status(RELAY_ON)
-							update_db = True
+							# Rule found, so break from the loop
+							rule_found = True
+							self._setpoint = cur_rule['temperature']	# Keep track of current temperature setpoint
+							break
+					else:	# Rule not found
+						# Decrease the day, but increase the time
+						self._logger.debug('  Could not find the appropriate rule, moving back one day')
+						if cur_day == RULE_DAYS['Monday']:
+							cur_day = RULE_DAYS['Sunday']
 						else:
-							# No change
-							self._logger.debug('    Relay remains %s as setpoint is %.2f Celsius', 'on' if self._relay_on else 'off', cur_rule['temperature'])
-						
-						# Rule found, so break from the loop
-						rule_found = True
-						self._setpoint = cur_rule['temperature']	# Keep track of current temperature setpoint
-						break
-				else:	# Rule not found
-					# Decrease the day, but increase the time
-					self._logger.debug('  Could not find the appropriate rule, moving back one day')
-					if cur_day == RULE_DAYS['Monday']:
-						cur_day = RULE_DAYS['Sunday']
-					else:
-						cur_day -= 1
-					cur_hour += 24.0
-		else:  # Thermostat is off, so no update
-			self._logger.debug('    Thermostat off - no change')
-			
-		# Send thermostat status to database
-		#-----------------------------------------------------------------------
-		if update_db:
-			self._update_database(cur_temp)
+							cur_day -= 1
+						cur_hour += 24.0
+			else:  # Thermostat is off, so no update
+				self._logger.debug('    Thermostat off - no change')
 
-		# Update the display with the setpoint
-		#-----------------------------------------------------------------------
-		setpoint_str = 'Setpoint: %.1f' % self._setpoint
-		if self._setpoint_str != setpoint_str:	# Only update if new string
-			self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.SETPOINT_TEMP, setpoint_str)))
-			self._setpoint_str = setpoint_str
+			# Send thermostat status to database
+			#-----------------------------------------------------------------------
+			if update_db:
+				self._update_database(cur_temp)
+
+			# Update the display with the setpoint
+			#-----------------------------------------------------------------------
+			setpoint_str = 'Setpoint: %.1f' % self._setpoint
+			if self._setpoint_str != setpoint_str:	# Only update if new string
+				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.SETPOINT_TEMP, setpoint_str)))
+				self._setpoint_str = setpoint_str
 
 	#---------------------------------------------------------------------------
 	# _update_database Method
 	#---------------------------------------------------------------------------
-	def _update_database(self, temperature = 0.0):
+	def _update_database(self, temperature = ABSOLUTE_ZERO):
 		# Get sensor data
-		self._logger.debug('  Current temperature passed to _update_database is %f', temperature)
-		cur_temp = self._temp_sensor.read_temperature() if temperature == 0.0 else temperature
-#		cur_lux = self._lux_sensor.read_luminosity_opt()
-		self._logger.debug('  Reading the humidity')
-		cur_h2o = self._temp_sensor.read_humidity()
+		try:
+			# Get temperature and create update data record
+			self._logger.debug('  Acquiring thermostat sensor data')
+			cur_temp = self._temp_sensor.read_temperature() if temperature == ABSOLUTE_ZERO else temperature
 
-		# Create the data package
-		self._logger.debug('  Creating the data package')
-		cur_data = {'temperature': cur_temp,
-#		            'luminosity_lux': cur_lux,
-		            'humidity': cur_h2o,
-		            'thermo_on': 1.0 if self._thermo_on else 0.0,
-		            'heating_on': 1.0 if self._relay_on else 0.0}
-		if self._override_on: cur_data['override'] = self._setpoint
-#		self._logger.debug('cur_data from thermostat._update_database: %s', cur_data)
+			# Create the data package
+			cur_data = {'temperature': cur_temp,
+			            'thermo_on': 1.0 if self._thermo_on else 0.0,
+			            'heating_on': 1.0 if self._relay_on else 0.0}
+			if self._override_on: cur_data['override'] = self._setpoint
 
-		# Send the data package message
-		self._logger.info('  Sending thermostat data to be transmitted through the LAN')
-		request = self._create_request(cur_data)
-		self._ehandler(messaging.LANTxMessage(messaging.DBPacket(request)))
+			# Get luminosity and update data record
+			# try:
+			# 	self._logger.debug('  Reading the luminosity')
+			# 	cur_lux = self._lux_sensor.read_luminosity_opt()
+			# except pigpio.error:
+			# 	self._logger.error('  Error reading luminosity - will not update this measurement')
+			# else:
+			# 	cur_data['luminosity_lux'] = cur_lux
+
+			# Get humidity and update data record
+			try:
+				self._logger.debug('  Reading the humidity')
+				cur_h2o = self._temp_sensor.read_humidity()
+			except pigpio.error:
+				self._logger.error('  Error reading humidity - will not update this measurement')
+			else:
+				cur_data['humidity'] = cur_h2o
+
+			# Send the data package message
+			self._logger.info('  Sending thermostat data to be transmitted through the LAN')
+			request = self._create_request(cur_data)
+			self._ehandler(messaging.LANTxMessage(messaging.DBPacket(request)))
+		except pigpio.error:
+			self._logger.error('  Error reading thermostat temperature outside control loop - skipping database update')
 
 	#---------------------------------------------------------------------------
 	# _create_request Method

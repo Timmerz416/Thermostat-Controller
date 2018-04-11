@@ -408,7 +408,7 @@ class WeatherDisplay(threading.Thread):
 						self._logger.debug('  No precipitation present, checking cloud layers (assuming sunny skies to start)')
 						new_icon = WX_SUNNY  # Default to no coverage, or sunny skies
 						for layer in metar.findall('./sky_condition'):
-							if layer.attrib['cloud_base_ft_agl'] is None:  # Check that a cloud base is defined - won't be for clear skies
+							if 'cloud_base_ft_agl' not in layer.keys():  # Check that a cloud base is defined - won't be for clear skies
 								self._logger.debug('    Evaluating layer %s', layer.attrib['sky_cover'])
 								if layer.attrib['sky_cover'] == 'SKC' or layer.attrib['sky_cover'] == 'CLR':
 									# Call this condition sunny skies and break out of the loop (not likely needed)
