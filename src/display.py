@@ -72,8 +72,8 @@ POWER_LED       = 8
 
 # Weather Icon Addresses
 WX_SUNNY        =  0
-WX_SCT_CLOUDS   =  1
-WX_BKN_CLOUDS   =  2
+WX_FEW_CLOUDS   =  1
+WX_SCT_CLOUDS   =  2
 WX_OVC_CLOUDS   =  3
 WX_SHOWERS      =  4
 WX_RAIN         =  5
@@ -366,6 +366,8 @@ class WeatherDisplay(threading.Thread):
 					self._logger.error('  Could not reach the server: %s', url_error.reason)
 				elif hasattr(url_error, 'code'):
 					self._logger.error('  The server could not fulfill the request: %s', url_error.code)
+			except:
+				self._logger.error('  Unknown error thrown by attempt to read weather from the internet - skipping update')
 			else:
 				# Get the node with the most recent weather data
 				xml_root = ET.fromstring(xml_data)
@@ -419,9 +421,9 @@ class WeatherDisplay(threading.Thread):
 								self._logger.debug('    Evaluating layer %s at %s', layer.attrib['sky_cover'], layer.attrib['cloud_base_ft_agl'])
 								if layer.attrib['sky_cover'] == 'FEW':
 									self._logger.debug('    Evaluating this few clouds layer')
-									if new_icon < WX_SUNNY:
-										new_icon = WX_SUNNY  # Treat this as sunny skies
-										self._logger.debug('      Icon will be updated to WX_SUNNY based on this layer')
+									if new_icon < WX_FEW_CLOUDS:
+										new_icon = WX_FEW_CLOUDS  # Treat this as sunny skies
+										self._logger.debug('      Icon will be updated to WX_FEW_CLOUDS based on this layer')
 								elif layer.attrib['sky_cover'] == 'SCT':
 									self._logger.debug('    Evaluating this scattered layer')
 									if new_icon < WX_SCT_CLOUDS:
@@ -429,9 +431,9 @@ class WeatherDisplay(threading.Thread):
 										self._logger.debug('      Icon will be updated to WX_SCT_CLOUDS based on this layer')
 								elif layer.attrib['sky_cover'] == 'BKN':
 									self._logger.debug('    Evaluating this broken layer')
-									if new_icon < WX_BKN_CLOUDS:
-										new_icon = WX_BKN_CLOUDS
-										self._logger.debug('      Icon will be updated to WX_BKN_CLOUDS based on this layer')
+									if new_icon < WX_OVC_CLOUDS:
+										new_icon = WX_OVC_CLOUDS
+										self._logger.debug('      Icon will be updated to WX_OVC_CLOUDS based on this layer')
 								elif layer.attrib['sky_cover'] == 'OVC':
 									self._logger.debug('    Evaluating this overcast layer')
 									if new_icon < WX_OVC_CLOUDS:

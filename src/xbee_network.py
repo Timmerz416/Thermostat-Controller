@@ -104,12 +104,24 @@ class XBeeNetwork(threading.Thread):
 		self._logger.debug('XBee Network thread closing')
 	
 	#---------------------------------------------------------------------------
+	# _xbee_data_string Method
+	#---------------------------------------------------------------------------
+	def _xbee_data_string(self, data):
+		# types: (dict) -> string
+		# Iterate through each of the keys
+		data_str = ''  # Initialize string to be empty
+		for cur_key in data:
+			data_str += '    %s: %s\n' % ( cur_key, messaging.binary_print(data[cur_key]) ) 
+		return data_str[:-1]  # Cut off the training new line
+	
+	#---------------------------------------------------------------------------
 	# _xbee_event Method
 	#---------------------------------------------------------------------------
 	def _xbee_event(self, data):
 		# types: (dict) -> none
 		# Check the message type
 		self._logger.info('Received an XBee data packet')
+		self._logger.debug('  Data packet is:\n%s', self._xbee_data_string(data))
 		if 'id' in data and data['id'] == 'rx':	# Sensor data received
 			# Create database update string and send to the database over the LAN
 			request_str = self._create_request(data)
@@ -156,7 +168,9 @@ class XBeeNetwork(threading.Thread):
 				# Read the first byte which gives the data type
 #				is_pressure = False
 #				is_override = False
+				self._logger.debug('      Evaluating reading for sensor %i', i)
 				type_byte = ord(data['rf_data'][5*i+1])
+				self._logger.debug('        Sensor type is %i', type_byte)
 				
 				# Create the label for the sensor data
 				type_error = False
@@ -188,7 +202,8 @@ class XBeeNetwork(threading.Thread):
 				
 				# Convert the binary data to a float and add to string
 				if not type_error:
-					float_value = struct.unpack('f', data['rf_data'][5*i+2:5*i+7])
+					self._logger.debug('        Converting byte array to float')
+					float_value = struct.unpack('f', data['rf_data'][5*i+2:5*i+6])
 					resp_str += '%f' % float_value
 					
 		# Return the string
@@ -207,6 +222,6 @@ class XBeeNetwork(threading.Thread):
 		for i in range(num_sensors):
 			type_byte = ord(data['rf_data'][5 * i + 1])
 			if type_byte == TEMPERATURE_CODE:  # Found temperature, convert to string and send to the display
-				float_value = struct.unpack('f', data['rf_data'][5*i+2:5*i+7])  # Convert the bytes to a single-precision float
+				float_value = struct.unpack('f', data['rf_data'][5*i+2:5*i+6])  # Convert the bytes to a single-precision float
 				display_str = 'Outdoor: %.1f' % float_value
 				self._ehandler(messaging.DisplayTxMessage(messaging.Command(display.SET_STATUS, display.OUTSIDE_TEMP, display_str)))

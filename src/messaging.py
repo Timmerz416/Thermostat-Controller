@@ -44,7 +44,7 @@ DISPLAY_TX_MESSAGE	=  4
 #-------------------------------------------------------------------------------
 # binary_print Function
 #-------------------------------------------------------------------------------
-def binary_print(bin_data, separator):
+def binary_print(bin_data, separator = '-'):
 	# types: (list, string) -> string
 	"""
 	This method take a list of bytes and converts to a string with formatted

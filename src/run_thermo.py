@@ -11,6 +11,7 @@ import logging.config
 import threading
 import argparse
 import yaml
+from time import sleep
 
 # ===============================================================================
 # CONSTANTS
@@ -89,8 +90,12 @@ def dispatch_message(cur_msg):
 # Parse any command line arguments
 parser = argparse.ArgumentParser(description='Start the thermostat controller (defalut is NORMAL)')
 parser.add_argument('-m', '--mode', dest='mode', choices=['NORMAL', 'DEBUG'], default='NORMAL', help='The mode to run the controller in')
+parser.add_argument('-d', '--delay', dest='delay', type=int, default=0, required=False, help='Set the startup delay (in seconds) before initiating thermostat')
 
 args = parser.parse_args()
+
+# Pause for execution of any startup services
+sleep(args.delay)  # Delay for specified seconds while system services start
 
 # Initialize the logger
 log_level = logging.INFO if args.mode == 'NORMAL' else logging.DEBUG
