@@ -11,7 +11,10 @@ import logging.config
 import threading
 import argparse
 import yaml
+import urllib
 from time import sleep
+from datetime import datetime
+from local_stores import LocalStorage
 
 # ===============================================================================
 # CONSTANTS
@@ -67,14 +70,16 @@ def dispatch_message(cur_msg):
 		logger.debug('  Received LAN transmission request for %s', 'database' if cur_msg.is_http() else 'socket')
 		if cur_msg.is_http():  # Database message via http
 			logger.info('Sending LAN transmission request via HTTP')
-			lan_success = lan_thread.send_http_request(cur_msg.get_data().packet)
+			if not lan_thread.send_http_request(cur_msg.get_data().packet):
+				add_time = "&time=" + urllib.quote("'" + datetime.now().isoformat(' ')[0:19] + "'")  # Create string addition to set measurement time
+				saved_request = cur_msg.get_data().packet + add_time  # Updated request that sets current time as measurement time
+				
+				# Send the request to the local database to be saved and sent later when connected to main database
+				local_db.push(saved_request)
 		else:
 			logger.info('Sending LAN transmission response via a socket')
-			lan_success = lan_thread.send_socket_request(cur_msg.get_data())
-
-		# Process any errors
-		if not lan_success:
-			pass  # TODO - resubmit the message to try again?
+			if not lan_thread.send_socket_request(cur_msg.get_data()):
+				pass  # TODO - figure out how to deal with socket response not working - probably just log the error
 
 	elif msg_id == messaging.DISPLAY_TX_MESSAGE:  # Transmitting message to the display
 		# Send message to the display
@@ -112,6 +117,9 @@ config_file = '/home/tl1/.thermopi.conf' if args.mode == 'NORMAL' else '/home/tl
 with open(config_file, 'r') as ymlfile:
 	config = yaml.load(ymlfile)
 
+# Connect to the local storage database
+local_db = LocalStorage(config['local_store'])
+
 # Start the display
 display_thread = display.DisplayControl(queue_message, shutdown)
 display_thread.start()
@@ -130,6 +138,15 @@ lan_thread.start()
 # Start the xbee network
 xbee_thread = xbee_network.XBeeNetwork(queue_message, shutdown, db_upload_string, config['outdoor_radio'])
 xbee_thread.start()
+
+# Check to see if there are any http transmissions that are still stored one the local machine, and send them it so
+while True:
+	unsent_trans = local_db.pop()
+	if unsent_trans is None:
+		break  # Get out of this loop as there is nothing to send
+	else:  # There is an unsent transmission
+		# Try to resend
+		queue_message(messaging.LANTxMessage(messaging.DBPacket(unsent_trans[1])))
 
 # Loop to check the status of the queue and dispatch messages
 while not shutdown.is_set():
