@@ -75,6 +75,7 @@ def dispatch_message(cur_msg):
 				saved_request = cur_msg.get_data().packet + add_time  # Updated request that sets current time as measurement time
 				
 				# Send the request to the local database to be saved and sent later when connected to main database
+				logger.debug('    Saving transmission to the local storage database for later transmission: %s', saved_request)
 				local_db.push(saved_request)
 		else:
 			logger.info('Sending LAN transmission response via a socket')
